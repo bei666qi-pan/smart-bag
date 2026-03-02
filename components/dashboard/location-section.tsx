@@ -5,10 +5,10 @@ import { Badge } from "@/components/ui/badge"
 import { MapPin, Navigation, Shield, Clock } from "lucide-react"
 
 const recentLocations = [
-  { time: "14:30", location: "Classroom 3-B", status: "current" as const },
-  { time: "12:15", location: "Cafeteria", status: "past" as const },
-  { time: "10:00", location: "Library", status: "past" as const },
-  { time: "08:30", location: "School Gate", status: "past" as const },
+  { time: "14:30", location: "教室 3-B", status: "current" as const },
+  { time: "12:15", location: "食堂", status: "past" as const },
+  { time: "10:00", location: "图书馆", status: "past" as const },
+  { time: "08:30", location: "学校门口", status: "past" as const },
 ]
 
 export function LocationSection() {
@@ -18,7 +18,7 @@ export function LocationSection() {
       <div className="flex flex-col gap-4">
         <div className="flex items-center gap-2">
           <MapPin className="h-5 w-5 text-foreground" />
-          <h2 className="text-lg font-semibold text-foreground">Location</h2>
+          <h2 className="text-lg font-semibold text-foreground">位置</h2>
         </div>
 
         <div className="grid gap-4 lg:grid-cols-3">
@@ -27,7 +27,7 @@ export function LocationSection() {
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2 text-sm font-medium text-foreground">
                 <Navigation className="h-4 w-4" />
-                Live Map
+                实时地图
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -55,11 +55,11 @@ export function LocationSection() {
                 <div className="absolute left-3 top-3 flex flex-col gap-2">
                   <Badge variant="secondary" className="text-xs font-mono">
                     <Navigation className="mr-1.5 h-3 w-3" />
-                    Speed: 0 km/h
+                    速度：0 km/h
                   </Badge>
                   <Badge variant="secondary" className="bg-emerald-50 text-emerald-700 border-emerald-200 text-xs">
                     <Shield className="mr-1.5 h-3 w-3" />
-                    Zone: Safe
+                    区域：安全
                   </Badge>
                 </div>
                 {/* Coordinates */}
@@ -77,7 +77,7 @@ export function LocationSection() {
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2 text-sm font-medium text-foreground">
                 <Clock className="h-4 w-4" />
-                Location History
+                位置历史
               </CardTitle>
             </CardHeader>
             <CardContent>

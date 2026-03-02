@@ -11,10 +11,10 @@ import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 
 const viewLabels: Record<string, string> = {
-  dashboard: "Overview",
-  vision: "Vision",
-  location: "Location",
-  interaction: "Interaction",
+  dashboard: "概览",
+  vision: "视觉",
+  location: "位置",
+  interaction: "交互",
 }
 
 interface TopBarProps {
@@ -28,7 +28,7 @@ export function TopBar({ activeView }: TopBarProps) {
       <header className="flex h-14 shrink-0 items-center justify-between border-b border-border bg-card px-6">
         {/* Breadcrumbs */}
         <nav className="flex items-center gap-1.5 text-sm" aria-label="Breadcrumb">
-          <span className="text-muted-foreground">Dashboard</span>
+          <span className="text-muted-foreground">仪表盘</span>
           <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
           <span className="font-medium text-foreground">
             {viewLabels[activeView] || "Overview"}
@@ -47,7 +47,7 @@ export function TopBar({ activeView }: TopBarProps) {
               variant="secondary"
               className="bg-emerald-50 text-emerald-700 border-emerald-200 text-xs font-medium"
             >
-              MQTT Live
+              MQTT 在线
             </Badge>
           </div>
 
@@ -56,7 +56,7 @@ export function TopBar({ activeView }: TopBarProps) {
           {/* GPS Signal */}
           <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
             <Signal className="h-4 w-4 text-foreground" />
-            <span className="font-mono text-xs">GPS</span>
+            <span className="font-mono text-xs">GPS 信号</span>
           </div>
 
           <Separator orientation="vertical" className="h-5" />
@@ -78,7 +78,7 @@ export function TopBar({ activeView }: TopBarProps) {
           {/* Battery */}
           <div className="flex items-center gap-1.5 text-sm">
             <BatteryMedium className="h-4 w-4 text-foreground" />
-            <span className="font-mono text-xs text-muted-foreground">85%</span>
+            <span className="font-mono text-xs text-muted-foreground">电量 85%</span>
           </div>
         </div>
       </header>

@@ -17,11 +17,11 @@ import {
 } from "lucide-react"
 
 const mockMessages = [
-  { id: 1, sender: "parent", text: "Have you arrived at school?", time: "08:25" },
-  { id: 2, sender: "child", text: "Yes, I just entered the classroom!", time: "08:26" },
-  { id: 3, sender: "parent", text: "Good. Remember to drink water.", time: "08:27" },
-  { id: 4, sender: "child", text: "Ok, got it!", time: "08:28" },
-  { id: 5, sender: "system", text: "Focus Mode activated at 08:30", time: "08:30" },
+  { id: 1, sender: "parent", text: "你到学校了吗？", time: "08:25" },
+  { id: 2, sender: "child", text: "是的，我刚进教室！", time: "08:26" },
+  { id: 3, sender: "parent", text: "好的。记得喝水。", time: "08:27" },
+  { id: 4, sender: "child", text: "好的，收到！", time: "08:28" },
+  { id: 5, sender: "system", text: "专注模式已在 08:30 启动", time: "08:30" },
 ]
 
 export function InteractionSection() {
@@ -60,7 +60,7 @@ export function InteractionSection() {
       <div className="flex flex-col gap-4">
         <div className="flex items-center gap-2">
           <MessageCircle className="h-5 w-5 text-foreground" />
-          <h2 className="text-lg font-semibold text-foreground">Interaction</h2>
+          <h2 className="text-lg font-semibold text-foreground">交互</h2>
         </div>
 
         <div className="grid gap-4 lg:grid-cols-3">
@@ -69,7 +69,7 @@ export function InteractionSection() {
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2 text-sm font-medium text-foreground">
                 <MessageCircle className="h-4 w-4" />
-                Messages
+                消息
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -122,10 +122,10 @@ export function InteractionSection() {
                 {/* Input area */}
                 <div className="flex items-center gap-2">
                   <Input
-                    placeholder="Type a message..."
+                    placeholder="输入消息..."
                     className="flex-1 text-sm"
                   />
-                  <Button size="icon" className="shrink-0" aria-label="Send message">
+                  <Button size="icon" className="shrink-0" aria-label="发送消息">
                     <Send className="h-4 w-4" />
                   </Button>
                 </div>
@@ -138,7 +138,7 @@ export function InteractionSection() {
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2 text-sm font-medium text-foreground">
                 <Focus className="h-4 w-4" />
-                Focus Mode
+                专注模式
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -152,7 +152,7 @@ export function InteractionSection() {
                       {String(focusSeconds).padStart(2, "0")}
                     </span>
                     <span className="text-xs text-muted-foreground">
-                      {isFocusRunning ? "Focusing..." : "Ready"}
+                      {isFocusRunning ? "专注中..." : "就绪"}
                     </span>
                   </div>
                   {/* Progress ring indicator */}
@@ -167,7 +167,7 @@ export function InteractionSection() {
                     variant="outline"
                     size="icon"
                     onClick={resetFocus}
-                    aria-label="Reset timer"
+                    aria-label="重置计时器"
                   >
                     <RotateCcw className="h-4 w-4" />
                   </Button>
@@ -175,7 +175,7 @@ export function InteractionSection() {
                     size="lg"
                     className="h-12 w-12 rounded-full"
                     onClick={() => setIsFocusRunning(!isFocusRunning)}
-                    aria-label={isFocusRunning ? "Pause timer" : "Start timer"}
+                    aria-label={isFocusRunning ? "暂停计时器" : "开始计时器"}
                   >
                     {isFocusRunning ? (
                       <Pause className="h-5 w-5" />

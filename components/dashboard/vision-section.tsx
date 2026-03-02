@@ -9,13 +9,13 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Eye, Video, Brain, Clock } from "lucide-react"
 
 const aiLogs = [
-  { time: "14:32:05", message: "Detected: textbook (Math), confidence 0.96", type: "info" as const },
-  { time: "14:32:03", message: "Object tracking: 3 items identified in frame", type: "info" as const },
-  { time: "14:31:58", message: "Posture analysis: Normal sitting position", type: "success" as const },
-  { time: "14:31:45", message: "Lighting condition: Adequate (420 lux)", type: "info" as const },
-  { time: "14:31:30", message: "Warning: Low light detected briefly", type: "warning" as const },
-  { time: "14:31:15", message: "Scene classification: Classroom environment", type: "info" as const },
-  { time: "14:31:00", message: "Model inference latency: 23ms", type: "info" as const },
+  { time: "14:32:05", message: "检测到：教科书 (数学)，置信度 0.96", type: "info" as const },
+  { time: "14:32:03", message: "物体跟踪：画面中识别出 3 个物品", type: "info" as const },
+  { time: "14:31:58", message: "姿态分析：正常坐姿", type: "success" as const },
+  { time: "14:31:45", message: "光线条件：充足 (420 lux)", type: "info" as const },
+  { time: "14:31:30", message: "警告：检测到短暂光线不足", type: "warning" as const },
+  { time: "14:31:15", message: "场景分类：教室环境", type: "info" as const },
+  { time: "14:31:00", message: "模型推理延迟：23ms", type: "info" as const },
 ]
 
 export function VisionSection() {
@@ -27,7 +27,7 @@ export function VisionSection() {
       <div className="flex flex-col gap-4">
         <div className="flex items-center gap-2">
           <Eye className="h-5 w-5 text-foreground" />
-          <h2 className="text-lg font-semibold text-foreground">Vision</h2>
+          <h2 className="text-lg font-semibold text-foreground">视觉</h2>
         </div>
 
         <div className="grid gap-4 lg:grid-cols-3">
@@ -37,11 +37,11 @@ export function VisionSection() {
               <div className="flex items-center justify-between">
                 <CardTitle className="flex items-center gap-2 text-sm font-medium text-foreground">
                   <Video className="h-4 w-4" />
-                  Live Feed
+                  实时流
                 </CardTitle>
                 <div className="flex items-center gap-3">
                   <Label htmlFor="stream-mode" className="text-xs text-muted-foreground">
-                    {isWan ? "WAN" : "LAN"}
+                    {isWan ? "广域网" : "局域网"}
                   </Label>
                   <Switch
                     id="stream-mode"
@@ -60,10 +60,10 @@ export function VisionSection() {
                   </div>
                   <div className="text-center">
                     <p className="text-sm font-medium text-foreground">
-                      Camera Feed
+                      摄像头流
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      {isWan ? "WAN Stream - Remote Access" : "LAN Stream - Local Network"}
+                      {isWan ? "广域网流 - 远程访问" : "局域网流 - 本地网络"}
                     </p>
                   </div>
                 </div>
@@ -71,7 +71,7 @@ export function VisionSection() {
                 <div className="absolute left-3 top-3">
                   <Badge variant="secondary" className="bg-red-50 text-red-600 border-red-200 text-xs">
                     <span className="mr-1.5 inline-block h-1.5 w-1.5 rounded-full bg-red-500" />
-                    REC
+                    录制
                   </Badge>
                 </div>
                 <div className="absolute bottom-3 right-3">
@@ -88,7 +88,7 @@ export function VisionSection() {
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2 text-sm font-medium text-foreground">
                 <Brain className="h-4 w-4" />
-                AI Analysis
+                人工智能分析
               </CardTitle>
             </CardHeader>
             <CardContent>

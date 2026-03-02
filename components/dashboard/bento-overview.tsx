@@ -28,10 +28,10 @@ export function BentoOverview({ onNavigate }: BentoOverviewProps) {
         {/* Welcome */}
         <div className="flex flex-col gap-1">
           <h1 className="text-2xl font-semibold tracking-tight text-foreground text-balance">
-            Smart Schoolbag V5.0
+            智能书包 V5.0
           </h1>
           <p className="text-sm text-muted-foreground">
-            Digital Twin Dashboard - Real-time monitoring and intelligent analysis
+            数字孪生仪表盘 - 实时监测和智能分析
           </p>
         </div>
 
@@ -43,8 +43,8 @@ export function BentoOverview({ onNavigate }: BentoOverviewProps) {
                 <Wifi className="h-5 w-5 text-emerald-600" />
               </div>
               <div className="flex flex-col">
-                <span className="text-xs text-muted-foreground">Connection</span>
-                <span className="text-sm font-semibold text-foreground">Online</span>
+                <span className="text-xs text-muted-foreground">连接</span>
+                <span className="text-sm font-semibold text-foreground">在线</span>
               </div>
             </CardContent>
           </Card>
@@ -55,7 +55,7 @@ export function BentoOverview({ onNavigate }: BentoOverviewProps) {
                 <BatteryMedium className="h-5 w-5 text-blue-600" />
               </div>
               <div className="flex flex-col">
-                <span className="text-xs text-muted-foreground">Battery</span>
+                <span className="text-xs text-muted-foreground">电池</span>
                 <span className="text-sm font-semibold text-foreground">85%</span>
               </div>
             </CardContent>
@@ -67,7 +67,7 @@ export function BentoOverview({ onNavigate }: BentoOverviewProps) {
                 <Thermometer className="h-5 w-5 text-amber-600" />
               </div>
               <div className="flex flex-col">
-                <span className="text-xs text-muted-foreground">Temperature</span>
+                <span className="text-xs text-muted-foreground">温度</span>
                 <span className="text-sm font-semibold text-foreground">24°C</span>
               </div>
             </CardContent>
@@ -79,7 +79,7 @@ export function BentoOverview({ onNavigate }: BentoOverviewProps) {
                 <Droplets className="h-5 w-5 text-sky-600" />
               </div>
               <div className="flex flex-col">
-                <span className="text-xs text-muted-foreground">Humidity</span>
+                <span className="text-xs text-muted-foreground">湿度</span>
                 <span className="text-sm font-semibold text-foreground">45%</span>
               </div>
             </CardContent>
@@ -97,10 +97,10 @@ export function BentoOverview({ onNavigate }: BentoOverviewProps) {
               <CardTitle className="flex items-center justify-between text-sm font-medium text-foreground">
                 <span className="flex items-center gap-2">
                   <Eye className="h-4 w-4" />
-                  Vision
+                  视觉
                 </span>
                 <Badge variant="secondary" className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px]">
-                  Active
+                  活跃
                 </Badge>
               </CardTitle>
             </CardHeader>
@@ -112,15 +112,15 @@ export function BentoOverview({ onNavigate }: BentoOverviewProps) {
                 </div>
                 <div className="flex flex-col gap-2">
                   <div className="flex items-center justify-between text-xs">
-                    <span className="text-muted-foreground">Stream</span>
-                    <span className="font-medium text-foreground">LAN Mode</span>
+                    <span className="text-muted-foreground">流</span>
+                    <span className="font-medium text-foreground">局域网模式</span>
                   </div>
                   <div className="flex items-center justify-between text-xs">
-                    <span className="text-muted-foreground">AI Detections</span>
-                    <span className="font-medium text-foreground">3 objects</span>
+                    <span className="text-muted-foreground">人工智能检测</span>
+                    <span className="font-medium text-foreground">3 个物品</span>
                   </div>
                   <div className="flex items-center justify-between text-xs">
-                    <span className="text-muted-foreground">Latency</span>
+                    <span className="text-muted-foreground">延迟</span>
                     <span className="font-mono text-foreground">23ms</span>
                   </div>
                 </div>
@@ -137,21 +137,21 @@ export function BentoOverview({ onNavigate }: BentoOverviewProps) {
               <CardTitle className="flex items-center justify-between text-sm font-medium text-foreground">
                 <span className="flex items-center gap-2">
                   <MapPin className="h-4 w-4" />
-                  Location
+                  位置
                 </span>
                 <Badge variant="secondary" className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px]">
-                  Safe Zone
+                  安全区
                 </Badge>
               </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="flex flex-col gap-2">
                 <div className="flex items-center justify-between text-xs">
-                  <span className="text-muted-foreground">Current</span>
-                  <span className="font-medium text-foreground">Classroom 3-B</span>
+                  <span className="text-muted-foreground">当前</span>
+                  <span className="font-medium text-foreground">教室 3-B</span>
                 </div>
                 <div className="flex items-center justify-between text-xs">
-                  <span className="text-muted-foreground">Speed</span>
+                  <span className="text-muted-foreground">速度</span>
                   <span className="font-mono text-foreground">0 km/h</span>
                 </div>
               </div>
@@ -167,21 +167,21 @@ export function BentoOverview({ onNavigate }: BentoOverviewProps) {
               <CardTitle className="flex items-center justify-between text-sm font-medium text-foreground">
                 <span className="flex items-center gap-2">
                   <MessageCircle className="h-4 w-4" />
-                  Interaction
+                  交互
                 </span>
                 <Badge variant="secondary" className="text-[10px]">
-                  2 new
+                  2 条新消息
                 </Badge>
               </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="flex flex-col gap-2">
                 <div className="flex items-center justify-between text-xs">
-                  <span className="text-muted-foreground">Latest</span>
-                  <span className="font-medium text-foreground truncate ml-2">Ok, got it!</span>
+                  <span className="text-muted-foreground">最新</span>
+                  <span className="font-medium text-foreground truncate ml-2">好的，收到！</span>
                 </div>
                 <div className="flex items-center justify-between text-xs">
-                  <span className="text-muted-foreground">Focus Timer</span>
+                  <span className="text-muted-foreground">专注计时</span>
                   <span className="font-mono text-foreground">25:00</span>
                 </div>
               </div>
@@ -193,16 +193,16 @@ export function BentoOverview({ onNavigate }: BentoOverviewProps) {
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2 text-sm font-medium text-foreground">
                 <Backpack className="h-4 w-4" />
-                Bag Contents
+                书包内容
               </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                 {[
-                  { name: "Math Textbook", icon: BookOpen, status: "ok" },
-                  { name: "English Book", icon: BookOpen, status: "ok" },
-                  { name: "Notebook", icon: BookOpen, status: "ok" },
-                  { name: "Water Bottle", icon: Droplets, status: "ok" },
+                  { name: "数学教科书", icon: BookOpen, status: "ok" },
+                  { name: "英文书", icon: BookOpen, status: "ok" },
+                  { name: "笔记本", icon: BookOpen, status: "ok" },
+                  { name: "水瓶", icon: Droplets, status: "ok" },
                 ].map((item, i) => {
                   const Icon = item.icon
                   return (
@@ -235,7 +235,7 @@ export function BentoOverview({ onNavigate }: BentoOverviewProps) {
             <CardContent className="flex items-center gap-3 pt-6">
               <Activity className="h-4 w-4 text-blue-500" />
               <div className="flex flex-col">
-                <span className="text-xs text-muted-foreground">Memory</span>
+                <span className="text-xs text-muted-foreground">内存</span>
                 <span className="font-mono text-sm font-semibold text-foreground">256MB</span>
               </div>
             </CardContent>
@@ -244,8 +244,8 @@ export function BentoOverview({ onNavigate }: BentoOverviewProps) {
             <CardContent className="flex items-center gap-3 pt-6">
               <ShieldCheck className="h-4 w-4 text-emerald-500" />
               <div className="flex flex-col">
-                <span className="text-xs text-muted-foreground">Security</span>
-                <span className="text-sm font-semibold text-foreground">Normal</span>
+                <span className="text-xs text-muted-foreground">安全</span>
+                <span className="text-sm font-semibold text-foreground">正常</span>
               </div>
             </CardContent>
           </Card>

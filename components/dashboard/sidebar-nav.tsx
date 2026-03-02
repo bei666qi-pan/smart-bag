@@ -18,10 +18,10 @@ import {
 } from "@/components/ui/tooltip"
 
 const navItems = [
-  { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { id: "vision", label: "Vision", icon: Eye },
-  { id: "location", label: "Location", icon: MapPin },
-  { id: "interaction", label: "Interaction", icon: MessageCircle },
+  { id: "dashboard", label: "仪表盘", icon: LayoutDashboard },
+  { id: "vision", label: "视觉", icon: Eye },
+  { id: "location", label: "位置", icon: MapPin },
+  { id: "interaction", label: "交互", icon: MessageCircle },
 ]
 
 interface SidebarNavProps {
@@ -80,7 +80,7 @@ export function SidebarNav({ activeView, onViewChange }: SidebarNavProps) {
               </button>
             </TooltipTrigger>
             <TooltipContent side="right" sideOffset={8}>
-              <p>Settings</p>
+              <p>设置</p>
             </TooltipContent>
           </Tooltip>
 
@@ -91,7 +91,7 @@ export function SidebarNav({ activeView, onViewChange }: SidebarNavProps) {
               </div>
             </TooltipTrigger>
             <TooltipContent side="right" sideOffset={8}>
-              <p>Profile</p>
+              <p>个人资料</p>
             </TooltipContent>
           </Tooltip>
         </div>
