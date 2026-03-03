@@ -1,0 +1,264 @@
+// components/dashboard/vision-section.tsx
+"use client"
+
+import { useState, useEffect, useActionState } from "react"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Switch } from "@/components/ui/switch"
+import { Label } from "@/components/ui/label"
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { ScrollArea } from "@/components/ui/scroll-area"
+import { Eye, Video, Brain, Clock, Sparkles, Loader2 } from "lucide-react"
+import { analyzeImageAction, ActionState } from "@/app/actions/analyze-image"
+import { toast } from "sonner"
+
+const aiLogs = [
+  { time: "14:32:05", message: "检测到:教科书 (数学),置信度 0.96", type: "info" as const },
+  { time: "14:32:03", message: "物体跟踪:画面中识别出 3 个物品", type: "info" as const },
+  { time: "14:31:58", message: "姿态分析:正常坐姿", type: "success" as const },
+  { time: "14:31:45", message: "光线条件:充足 (420 lux)", type: "info" as const },
+  { time: "14:31:30", message: "警告:检测到短暂光线不足", type: "warning" as const },
+  { time: "14:31:15", message: "场景分类:教室环境", type: "info" as const },
+  { time: "14:31:00", message: "模型推理延迟:23ms", type: "info" as const },
+]
+
+const initialState: ActionState = {
+  success: false,
+  message: '',
+}
+
+export function VisionSection() {
+  const [isWan, setIsWan] = useState(false)
+  const [imageUrl, setImageUrl] = useState<string>('')
+  const [state, formAction, isPending] = useActionState(analyzeImageAction, initialState)
+
+  // WAN Mode: Poll for latest snapshot
+  useEffect(() => {
+    if (!isWan) return
+
+    const pollInterval = setInterval(() => {
+      setImageUrl(`/api/camera/latest?t=${Date.now()}`)
+    }, 2000) // Poll every 2 seconds
+
+    return () => clearInterval(pollInterval)
+  }, [isWan])
+
+  // Handle AI analysis result
+  useEffect(() => {
+    if (state.success && state.payload) {
+      toast.success('AI 分析完成', {
+        description: state.payload.analysis.slice(0, 100),
+      })
+    } else if (!state.success && state.message) {
+      toast.error('分析失败', {
+        description: state.message,
+      })
+    }
+  }, [state])
+
+  // Capture and analyze current frame
+  const handleAnalyze = async () => {
+    try {
+      toast.info('正在调用大模型分析...', {
+        description: '请稍候',
+      })
+
+      let blob: Blob
+
+      if (isWan) {
+        // Fetch from API
+        const response = await fetch(`/api/camera/latest?t=${Date.now()}`)
+        if (!response.ok) throw new Error('获取快照失败')
+        blob = await response.blob()
+      } else {
+        // Fetch from ESP32 direct stream
+        const esp32Url = process.env.NEXT_PUBLIC_ESP32_STREAM_URL || 'http://192.168.1.100:81/stream'
+        const response = await fetch(esp32Url)
+        if (!response.ok) throw new Error('获取 ESP32 流失败')
+        blob = await response.blob()
+      }
+
+      const formData = new FormData()
+      formData.append('image', blob, 'snapshot.jpg')
+      formAction(formData)
+    } catch (error) {
+      toast.error('获取图像失败', {
+        description: error instanceof Error ? error.message : '未知错误',
+      })
+    }
+  }
+
+  const streamUrl = isWan 
+    ? imageUrl 
+    : process.env.NEXT_PUBLIC_ESP32_STREAM_URL || 'http://192.168.1.100:81/stream'
+
+  return (
+    <>
+      {/* <!-- SECTION:VISION --> */}
+      <div className="flex flex-col gap-4">
+        <div className="flex items-center gap-2">
+          <Eye className="h-5 w-5 text-foreground" />
+          <h2 className="text-lg font-semibold text-foreground">视觉中心</h2>
+        </div>
+
+        <div className="grid gap-4 lg:grid-cols-3">
+          {/* Video Feed */}
+          <Card className="lg:col-span-2 border-border bg-card">
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="flex items-center gap-2 text-sm font-medium text-foreground">
+                  <Video className="h-4 w-4" />
+                  实时流
+                </CardTitle>
+                <div className="flex items-center gap-3">
+                  <Label htmlFor="stream-mode" className="text-xs text-muted-foreground">
+                    {isWan ? "广域网" : "局域网"}
+                  </Label>
+                  <Switch
+                    id="stream-mode"
+                    checked={isWan}
+                    onCheckedChange={setIsWan}
+                  />
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="relative aspect-video w-full overflow-hidden rounded-lg bg-muted">
+                {/* Video Stream */}
+                {!isWan ? (
+                  // LAN Mode: Direct ESP32 MJPEG Stream
+                  <img
+                    src={streamUrl}
+                    alt="ESP32 实时流"
+                    className="absolute inset-0 h-full w-full object-cover"
+                    onError={(e) => {
+                      console.error('[Vision] ESP32 流加载失败')
+                      e.currentTarget.style.display = 'none'
+                    }}
+                  />
+                ) : (
+                  // WAN Mode: Polling snapshot
+                  imageUrl ? (
+                    <img
+                      key={imageUrl}
+                      src={imageUrl}
+                      alt="远程快照"
+                      className="absolute inset-0 h-full w-full object-cover"
+                      onError={() => {
+                        console.error('[Vision] 快照加载失败')
+                      }}
+                    />
+                  ) : (
+                    <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
+                      <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                      <p className="text-sm text-muted-foreground">等待快照...</p>
+                    </div>
+                  )
+                )}
+
+                {/* Fallback placeholder */}
+                <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-muted">
+                  <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-accent">
+                    <Video className="h-8 w-8 text-muted-foreground" />
+                  </div>
+                  <div className="text-center">
+                    <p className="text-sm font-medium text-foreground">
+                      摄像头流
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {isWan ? "广域网流 - 远程访问" : "局域网流 - 本地网络"}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Status overlay */}
+                <div className="absolute left-3 top-3 z-10">
+                  <Badge variant="secondary" className="bg-red-50 text-red-600 border-red-200 text-xs">
+                    <span className="mr-1.5 inline-block h-1.5 w-1.5 rounded-full bg-red-500" />
+                    录制
+                  </Badge>
+                </div>
+                <div className="absolute bottom-3 right-3 z-10">
+                  <Badge variant="secondary" className="text-xs font-mono">
+                    1920x1080 @ 30fps
+                  </Badge>
+                </div>
+
+                {/* AI Analyze Button */}
+                <div className="absolute bottom-3 left-3 z-10">
+                  <Button
+                    size="sm"
+                    onClick={handleAnalyze}
+                    disabled={isPending}
+                    className="gap-2"
+                  >
+                    {isPending ? (
+                      <>
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                        分析中...
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="h-3 w-3" />
+                        AI 分析
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* AI Analysis Log */}
+          <Card className="border-border bg-card">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-sm font-medium text-foreground">
+                <Brain className="h-4 w-4" />
+                人工智能分析
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ScrollArea className="h-64 lg:h-72">
+                <div className="flex flex-col gap-2 pr-3">
+                  {/* Show latest analysis result */}
+                  {state.success && state.payload && (
+                    <div className="flex gap-2 rounded-lg border border-emerald-200 bg-emerald-50/50 p-2.5">
+                      <Sparkles className="mt-0.5 h-3 w-3 shrink-0 text-emerald-600" />
+                      <div className="flex flex-col gap-0.5">
+                        <span className="font-mono text-[10px] text-emerald-600">
+                          {new Date(state.payload.timestamp).toLocaleTimeString('zh-CN')}
+                        </span>
+                        <span className="text-xs leading-relaxed text-foreground">
+                          {state.payload.analysis}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Mock logs */}
+                  {aiLogs.map((log, i) => (
+                    <div
+                      key={i}
+                      className="flex gap-2 rounded-lg border border-border bg-muted/50 p-2.5"
+                    >
+                      <Clock className="mt-0.5 h-3 w-3 shrink-0 text-muted-foreground" />
+                      <div className="flex flex-col gap-0.5">
+                        <span className="font-mono text-[10px] text-muted-foreground">
+                          {log.time}
+                        </span>
+                        <span className="text-xs leading-relaxed text-foreground">
+                          {log.message}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </ScrollArea>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+      {/* <!-- /SECTION:VISION --> */}
+    </>
+  )
+}
