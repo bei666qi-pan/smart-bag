@@ -1,0 +1,47 @@
+services:
+  # ── Next.js IoT Dashboard ──
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        - NEXT_PUBLIC_MQTT_URL=${NEXT_PUBLIC_MQTT_URL:-ws://host.docker.internal:8083/mqtt}
+        - NEXT_PUBLIC_AMAP_KEY=${NEXT_PUBLIC_AMAP_KEY:-}
+        - NEXT_PUBLIC_AMAP_SECURITY_CODE=${NEXT_PUBLIC_AMAP_SECURITY_CODE:-}
+        - NEXT_PUBLIC_ESP32_STREAM_URL=${NEXT_PUBLIC_ESP32_STREAM_URL:-}
+    ports:
+      - "3000:3000"
+    environment:
+      - COZE_TOKEN=${COZE_TOKEN:-}
+      - COZE_BOT_ID=${COZE_BOT_ID:-}
+    depends_on:
+      - mqtt
+      - redis
+    restart: unless-stopped
+
+  # ── Eclipse Mosquitto MQTT Broker ──
+  mqtt:
+    image: eclipse-mosquitto:latest
+    ports:
+      - "1883:1883"
+      - "8083:8083"
+    volumes:
+      - ./mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - mosquitto_data:/mosquitto/data
+      - mosquitto_log:/mosquitto/log
+    restart: unless-stopped
+
+  # ── Redis Cache (Phase 3 preparation) ──
+  redis:
+    image: redis:alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    restart: unless-stopped
+
+volumes:
+  mosquitto_data:
+  mosquitto_log:
+  redis_data:

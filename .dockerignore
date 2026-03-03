@@ -1,0 +1,27 @@
+node_modules
+.next
+.git
+.gitignore
+
+# Environment files (secrets must be passed via build args / env)
+.env
+.env.*
+.env.local
+.env*.local
+
+# IDE & OS
+.vscode
+.idea
+*.swp
+.DS_Store
+
+# Docker files (prevent recursive context)
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Documentation & misc
+*.md
+docs/
+LICENSE
+repomix-output.md
