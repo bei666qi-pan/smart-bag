@@ -12,6 +12,8 @@ services:
     ports:
       - "3000:3000"
     environment:
+      - REDIS_URL=redis://redis:6379
+      - MQTT_SERVER_URL=mqtt://mqtt:1883
       - COZE_TOKEN=${COZE_TOKEN:-}
       - COZE_BOT_ID=${COZE_BOT_ID:-}
     depends_on:

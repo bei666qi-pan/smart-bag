@@ -37,6 +37,9 @@ export function useMqttClient(config: Partial<MqttConfig> = {}) {
       return
     }
 
+    // Hydrate from Redis before WebSocket takes over
+    useIoTStore.getState().fetchInitialState()
+
     // Generate persistent session ID
     const clientId = `web_${Math.random().toString(16).slice(2, 8)}`
 
