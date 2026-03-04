@@ -95,7 +95,8 @@ export function LocationSection() {
         const map = new AMap.Map(mapContainerRef.current, {
           viewMode: '2D',
           zoom: 15,
-          center: DEFAULT_CENTER, // HARDCODED - Safe on mount
+          // Use explicit LngLat instance to avoid LngLat(NaN, NaN) crash in prod
+          center: new AMap.LngLat(DEFAULT_CENTER[0], DEFAULT_CENTER[1]),
           mapStyle: 'amap://styles/normal',
           showLabel: true,
           features: ['bg', 'road', 'building', 'point'],
@@ -103,10 +104,34 @@ export function LocationSection() {
 
         mapRef.current = map
 
-        map.addControl(new AMap.Scale())
-        map.addControl(new AMap.ToolBar({ position: 'RB' }))
-
+        // Delay control creation until map complete to avoid race conditions
         map.on('complete', () => {
+          const AMapGlobal = (window as any).AMap
+          if (AMapGlobal && mapRef.current) {
+            try {
+              mapRef.current.addControl(new AMapGlobal.Scale())
+              mapRef.current.addControl(new AMapGlobal.ToolBar({ position: 'RB' }))
+            } catch (controlError) {
+              console.error('[AMap] 控件初始化失败:', controlError)
+            }
+          }
+
+          // Force resize every 500ms for ~3s to覆盖首屏布局抖动
+          let attempt = 0
+          const resizeInterval = setInterval(() => {
+            if (mapRef.current) {
+              try {
+                console.log('[AMap] Forcing resize heartbeat...')
+                mapRef.current.resize()
+              } catch (resizeError) {
+                console.error('[AMap] Heartbeat resize 失败:', resizeError)
+              }
+            }
+            attempt++
+            if (attempt > 6) {
+              clearInterval(resizeInterval)
+            }
+          }, 500)
           console.log('[AMap] 地图加载完成')
           
           // ✅ Check unmount flag before setState
@@ -188,85 +213,120 @@ export function LocationSection() {
     }
   }, [])
 
-  // BULLETPROOF Store Subscription
+  // 使用 ResizeObserver 监听容器物理尺寸，驱动 AMap resize，避免 Tailwind/布局变更导致的灰屏
+  useEffect(() => {
+    if (!mapContainerRef.current || !mapRef.current) return
+
+    const container = mapContainerRef.current
+    const map = mapRef.current
+
+    if (typeof ResizeObserver === 'undefined') {
+      return
+    }
+
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        if (entry.target === container && mapRef.current) {
+          try {
+            mapRef.current.resize()
+            console.log('[AMap] ResizeObserver: map resize triggered')
+          } catch (error) {
+            console.error('[AMap] ResizeObserver resize 失败:', error)
+          }
+        }
+      }
+    })
+
+    observer.observe(container)
+
+    return () => {
+      observer.disconnect()
+    }
+  }, [mapReady])
+
+  // BULLETPROOF Store Subscription with Zustand v5 transient updates
   useEffect(() => {
     if (!mapReady || !mapRef.current) return
 
-    console.log('[AMap] 订阅 GPS 更新...')
+    console.log('[AMap] 订阅 GPS 更新 (Zustand v5)...')
 
     const unsub = useIoTStore.subscribe(
       (state) => state.gpsCoords,
-      (coords) => {
-        // ✅ BULLETPROOF Type and NaN Guard (EXACT as specified)
-        if (!coords || !Array.isArray(coords) || coords.length !== 2) {
-          console.warn('[AMap] 坐标无效: 非数组或长度错误', coords)
-          return
-        }
-        
-        if (typeof coords[0] !== 'number' || typeof coords[1] !== 'number') {
-          console.warn('[AMap] 坐标无效: 非数字类型', coords)
-          return
-        }
-        
-        if (Number.isNaN(coords[0]) || Number.isNaN(coords[1])) {
-          console.warn('[AMap] 坐标无效: NaN 检测到', coords)
+      (currentCoords, prevCoords) => {
+        const map = mapRef.current
+        if (!map) return
+
+        // 1. Strict Validation (Defense in Depth)
+        if (!currentCoords || !Array.isArray(currentCoords) || currentCoords.length !== 2) {
           return
         }
 
-        // ✅ Additional range validation
-        const [lng, lat] = coords
+        const [lng, lat] = currentCoords
+
+        if (typeof lng !== 'number' || typeof lat !== 'number') {
+          return
+        }
+
+        if (Number.isNaN(lng) || Number.isNaN(lat)) {
+          return
+        }
+
         if (lng < -180 || lng > 180 || lat < -90 || lat > 90) {
-          console.warn('[AMap] 坐标超出有效范围:', coords)
           return
         }
 
-        // ✅ Safe to interact with AMap
-        console.log('[AMap] 收到有效 GPS 坐标 (WGS-84):', coords)
+        // 2. Precise Value Diff Check (Prevent reference traps)
+        const isSameLocation =
+          Array.isArray(prevCoords) &&
+          prevCoords.length === 2 &&
+          prevCoords[0] === lng &&
+          prevCoords[1] === lat
 
+        if (isSameLocation) return
+
+        // 3. Update Map Imperatively
         try {
-          // WGS-84 to GCJ-02 conversion
-          const converted = convertWgs84ToGcj02Coords(coords)
-          
-          // Validate conversion result
-          if (!converted || !Array.isArray(converted) || converted.length !== 2) {
-            console.error('[AMap] 坐标转换失败: 结果无效', converted)
+          const converted = convertWgs84ToGcj02Coords(currentCoords)
+
+          if (
+            !converted ||
+            !Array.isArray(converted) ||
+            converted.length !== 2 ||
+            Number.isNaN(converted[0]) ||
+            Number.isNaN(converted[1])
+          ) {
             return
           }
 
-          if (Number.isNaN(converted[0]) || Number.isNaN(converted[1])) {
-            console.error('[AMap] 坐标转换失败: NaN 结果', converted)
+          const AMapGlobal = (window as any).AMap
+          if (!AMapGlobal) {
+            console.error('[AMap] AMap 全局对象未找到')
             return
           }
 
-          console.log('[AMap] 转换后坐标 (GCJ-02):', converted)
-
-          const map = mapRef.current
-          if (!map) return
+          const lngLat = new AMapGlobal.LngLat(converted[0], converted[1])
 
           // Create marker if not exists
           if (!markerRef.current) {
-            const AMap = (window as any).AMap
-            if (!AMap) {
-              console.error('[AMap] AMap 全局对象未找到')
-              return
-            }
-
-            markerRef.current = new AMap.Marker({
-              position: converted,
-              icon: new AMap.Icon({
-                size: new AMap.Size(32, 32),
+            markerRef.current = new AMapGlobal.Marker({
+              position: lngLat,
+              icon: new AMapGlobal.Icon({
+                size: new AMapGlobal.Size(32, 32),
                 image: 'https://webapi.amap.com/theme/v1.3/markers/n/mark_b.png',
-                imageSize: new AMap.Size(32, 32),
+                imageSize: new AMapGlobal.Size(32, 32),
               }),
-              offset: new AMap.Pixel(-16, -32),
+              offset: new AMapGlobal.Pixel(-16, -32),
               title: '智能书包',
             })
 
             map.add(markerRef.current)
 
             // Initialize polyline
-            polylineRef.current = new AMap.Polyline({
-              path: [converted],
+            const initialPathPoint = lngLat
+            pathPointsRef.current = [initialPathPoint]
+
+            polylineRef.current = new AMapGlobal.Polyline({
+              path: pathPointsRef.current,
               strokeColor: '#3b82f6',
               strokeWeight: 4,
               strokeOpacity: 0.8,
@@ -279,23 +339,19 @@ export function LocationSection() {
             console.log('[AMap] Marker 和轨迹线已创建')
           } else {
             // Update existing marker
-            markerRef.current.setPosition(converted)
+            markerRef.current.setPosition(lngLat)
           }
 
           // Update trace path
-          pathPointsRef.current.push(converted)
+          pathPointsRef.current.push(lngLat)
           if (polylineRef.current) {
             polylineRef.current.setPath(pathPointsRef.current)
           }
 
-          // Synchronous center update (no animations - prevents unmount race conditions)
-          map.setCenter(converted)
-
+          // STRICT RULE: Use setCenter instead of panTo for high-frequency MQTT stability
+          map.setCenter(lngLat)
         } catch (e) {
-          console.error('[AMap] Marker Update Error:', e)
-          toast.error('位置更新失败', {
-            description: '坐标处理异常',
-          })
+          console.error('AMap Update Error:', e)
         }
       }
     )
@@ -324,10 +380,21 @@ export function LocationSection() {
                 实时地图
               </CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className="relative h-80 w-full overflow-hidden rounded-lg bg-muted">
+            <CardContent className="h-full">
+              {/* 上层容器仍然自适应，但不直接负责地图核心高度 */}
+              <div className="w-full flex-1 min-h-[400px] md:min-h-[500px] rounded-xl relative bg-muted flex flex-col">
                 {/* AMap Container */}
-                <div ref={mapContainerRef} className="absolute inset-0" />
+                <div
+                  id="amap-container"
+                  ref={mapContainerRef}
+                  className="[&_.amap-layer_img]:max-w-none [&_.amap-marker_img]:max-w-none [&_canvas]:max-w-none"
+                  style={{
+                    width: '100%',
+                    height: '600px',
+                    minHeight: '600px',
+                    position: 'relative',
+                  }}
+                />
 
                 {/* Loading Overlay */}
                 {isLoading && (
