@@ -1,0 +1,62 @@
+services:
+  # ── Nginx Reverse Proxy ──
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - web
+      - mqtt
+    restart: unless-stopped
+
+  # ── Next.js IoT Dashboard ──
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        - NEXT_PUBLIC_MQTT_URL=${NEXT_PUBLIC_MQTT_URL:-ws://localhost/mqtt}
+        - NEXT_PUBLIC_AMAP_KEY=${NEXT_PUBLIC_AMAP_KEY:-}
+        - NEXT_PUBLIC_AMAP_SECURITY_CODE=${NEXT_PUBLIC_AMAP_SECURITY_CODE:-}
+        - NEXT_PUBLIC_ESP32_STREAM_URL=${NEXT_PUBLIC_ESP32_STREAM_URL:-}
+    expose:
+      - "3000"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - MQTT_SERVER_URL=mqtt://mqtt:1883
+      - COZE_TOKEN=${COZE_TOKEN:-}
+      - COZE_BOT_ID=${COZE_BOT_ID:-}
+    depends_on:
+      - mqtt
+      - redis
+    restart: unless-stopped
+
+  # ── Eclipse Mosquitto MQTT Broker ──
+  mqtt:
+    image: eclipse-mosquitto:latest
+    ports:
+      - "1883:1883"
+    expose:
+      - "8083"
+    volumes:
+      - ./mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - mosquitto_data:/mosquitto/data
+      - mosquitto_log:/mosquitto/log
+    restart: unless-stopped
+
+  # ── Redis Cache ──
+  redis:
+    image: redis:alpine
+    expose:
+      - "6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    restart: unless-stopped
+
+volumes:
+  mosquitto_data:
+  mosquitto_log:
+  redis_data:

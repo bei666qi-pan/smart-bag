@@ -1,5 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  output: 'standalone',
   typescript: {
     ignoreBuildErrors: true,
   },
@@ -17,6 +18,7 @@ const nextConfig = {
     ],
   },
   experimental: {
+    instrumentationHook: true,
     serverActions: {
       bodySizeLimit: '10mb',
     },
