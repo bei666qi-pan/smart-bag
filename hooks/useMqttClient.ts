@@ -8,6 +8,7 @@ import { toast } from 'sonner'
 
 interface MqttConfig {
   brokerUrl: string
+  wsPath?: string
   topics: {
     lwt: string
     sensors: string
@@ -16,7 +17,11 @@ interface MqttConfig {
 }
 
 const DEFAULT_CONFIG: MqttConfig = {
-  brokerUrl: process.env.NEXT_PUBLIC_MQTT_URL || 'ws://localhost:8083/mqtt',
+  // IMPORTANT:
+  // - In production behind Traefik, prefer setting NEXT_PUBLIC_MQTT_URL to a public WS(S) endpoint.
+  // - Mosquitto WebSocket listener commonly exposes MQTT over WS at path "/mqtt".
+  brokerUrl: process.env.NEXT_PUBLIC_MQTT_URL || 'ws://localhost:8083',
+  wsPath: process.env.NEXT_PUBLIC_MQTT_PATH || '/mqtt',
   topics: {
     lwt: 'v5/bag/status',
     sensors: 'v5/bag/sensors',
@@ -45,6 +50,19 @@ export function useMqttClient(config: Partial<MqttConfig> = {}) {
 
     console.log('[MQTT] Initializing client:', clientId)
 
+    // Derive WS path:
+    // - If brokerUrl already includes a non-root pathname (e.g. wss://host/ws), respect it.
+    // - Otherwise use configured wsPath (default: /mqtt).
+    let wsPath = finalConfig.wsPath || '/mqtt'
+    try {
+      const parsed = new URL(finalConfig.brokerUrl)
+      if (parsed.pathname && parsed.pathname !== '/' && parsed.pathname !== '') {
+        wsPath = parsed.pathname
+      }
+    } catch {
+      // Non-URL strings are allowed by mqtt.js; keep default wsPath.
+    }
+
     // Initialize MQTT client
     const client = mqtt.connect(finalConfig.brokerUrl, {
       clientId,
@@ -52,6 +70,8 @@ export function useMqttClient(config: Partial<MqttConfig> = {}) {
       clean: true,
       reconnectPeriod: 5000,
       connectTimeout: 30000,
+      // NOTE: only affects WS/WSS transports; safe for tcp URLs too.
+      path: wsPath,
     })
 
     clientRef.current = client
