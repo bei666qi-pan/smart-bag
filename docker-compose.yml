@@ -17,7 +17,8 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
-        - NEXT_PUBLIC_MQTT_URL=${NEXT_PUBLIC_MQTT_URL:-ws://localhost/mqtt}
+        - NEXT_PUBLIC_MQTT_URL=${NEXT_PUBLIC_MQTT_URL:-wss://bag.versecraft.cn/mqtt}
+        - NEXT_PUBLIC_MQTT_PATH=${NEXT_PUBLIC_MQTT_PATH:-/mqtt}
         - NEXT_PUBLIC_AMAP_KEY=${NEXT_PUBLIC_AMAP_KEY:-}
         - NEXT_PUBLIC_AMAP_SECURITY_CODE=${NEXT_PUBLIC_AMAP_SECURITY_CODE:-}
         - NEXT_PUBLIC_ESP32_STREAM_URL=${NEXT_PUBLIC_ESP32_STREAM_URL:-}
