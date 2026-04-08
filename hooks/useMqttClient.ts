@@ -1,10 +1,9 @@
-// hooks/useMqttClient.ts
 "use client"
 
 import { useEffect, useRef } from 'react'
 import mqtt, { MqttClient } from 'mqtt'
-import { useIoTStore } from '@/store/useIoTStore'
 import { toast } from 'sonner'
+import { useIoTStore } from '@/store/useIoTStore'
 
 interface MqttConfig {
   brokerUrl: string
@@ -17,9 +16,6 @@ interface MqttConfig {
 }
 
 const DEFAULT_CONFIG: MqttConfig = {
-  // IMPORTANT:
-  // - In production behind Traefik, prefer setting NEXT_PUBLIC_MQTT_URL to a public WS(S) endpoint.
-  // - Mosquitto WebSocket listener commonly exposes MQTT over WS at path "/mqtt".
   brokerUrl: process.env.NEXT_PUBLIC_MQTT_URL || 'ws://localhost:8083',
   wsPath: process.env.NEXT_PUBLIC_MQTT_PATH || '/mqtt',
   topics: {
@@ -33,26 +29,19 @@ export function useMqttClient(config: Partial<MqttConfig> = {}) {
   const clientRef = useRef<MqttClient | null>(null)
   const finalConfig = { ...DEFAULT_CONFIG, ...config }
 
-  const { setLwtStatus, setBattery, setTemp, setHumid, setGpsCoords } = useIoTStore()
-
   useEffect(() => {
-    // Pattern B: Idempotency Check - Prevent Strict Mode zombie connections
     if (clientRef.current) {
       console.log('[MQTT] Client already exists, skipping initialization')
       return
     }
 
-    // Hydrate from Redis before WebSocket takes over
-    useIoTStore.getState().fetchInitialState()
+    const store = useIoTStore.getState()
+    store.fetchInitialState()
+    store.setMqttConnectionStatus('connecting')
 
-    // Generate persistent session ID
     const clientId = `web_${Math.random().toString(16).slice(2, 8)}`
-
     console.log('[MQTT] Initializing client:', clientId)
 
-    // Derive WS path:
-    // - If brokerUrl already includes a non-root pathname (e.g. wss://host/ws), respect it.
-    // - Otherwise use configured wsPath (default: /mqtt).
     let wsPath = finalConfig.wsPath || '/mqtt'
     try {
       const parsed = new URL(finalConfig.brokerUrl)
@@ -60,136 +49,130 @@ export function useMqttClient(config: Partial<MqttConfig> = {}) {
         wsPath = parsed.pathname
       }
     } catch {
-      // Non-URL strings are allowed by mqtt.js; keep default wsPath.
+      // mqtt.js accepts non-URL broker strings.
     }
 
-    // Initialize MQTT client
     const client = mqtt.connect(finalConfig.brokerUrl, {
       clientId,
       keepalive: 60,
       clean: true,
       reconnectPeriod: 5000,
       connectTimeout: 30000,
-      // NOTE: only affects WS/WSS transports; safe for tcp URLs too.
       path: wsPath,
     })
 
     clientRef.current = client
 
-    // Connection Events
     client.on('connect', () => {
-      console.log('[MQTT] 连接成功')
+      console.log('[MQTT] Connected to broker')
+      useIoTStore.getState().setMqttConnectionStatus('connected')
       toast.success('MQTT 连接成功', {
-        description: '设备通信已建立',
+        description: '已连接到 MQTT Broker',
       })
 
-      // Subscribe to topics
       const topics = Object.values(finalConfig.topics)
-      client.subscribe(topics, (err) => {
-        if (err) {
-          console.error('[MQTT] 订阅失败:', err)
+      client.subscribe(topics, (error) => {
+        if (error) {
+          console.error('[MQTT] Subscribe failed:', error)
           toast.error('订阅失败', {
-            description: err.message,
+            description: error.message,
           })
-        } else {
-          console.log('[MQTT] 订阅成功:', topics)
+          return
         }
+
+        console.log('[MQTT] Subscribed topics:', topics)
       })
     })
 
-    // Message Handler
     client.on('message', (topic, payload) => {
       try {
         const message = payload.toString()
-        console.log(`[MQTT] 收到消息 [${topic}]:`, message)
+        const data = JSON.parse(message)
+        const currentStore = useIoTStore.getState()
 
-        // LWT Status Handler
+        console.log(`[MQTT] Message received [${topic}]`, data)
+        currentStore.markLastSeen()
+
         if (topic === finalConfig.topics.lwt) {
-          const data = JSON.parse(message)
-          
           if (data.status === 'offline') {
-            setLwtStatus('offline')
+            currentStore.setDeviceOnline(false)
             toast.warning('设备离线', {
               description: '智能书包已断开连接',
             })
           } else if (data.status === 'online') {
-            setLwtStatus('online')
+            currentStore.setDeviceOnline(true)
             toast.success('设备在线', {
-              description: '智能书包已重新连接',
+              description: '智能书包已恢复连接',
             })
           }
+          return
         }
 
-        // Sensor Data Handler
         if (topic === finalConfig.topics.sensors) {
-          const data = JSON.parse(message)
-          
+          currentStore.setDeviceOnline(true)
+
           if (typeof data.battery === 'number') {
-            setBattery(data.battery)
+            currentStore.setBattery(data.battery)
           }
           if (typeof data.temp === 'number') {
-            setTemp(data.temp)
+            currentStore.setTemp(data.temp)
           }
           if (typeof data.humid === 'number') {
-            setHumid(data.humid)
+            currentStore.setHumid(data.humid)
           }
+          return
         }
 
-        // GPS Data Handler
         if (topic === finalConfig.topics.gps) {
-          const data = JSON.parse(message)
-          
-          // Expected format: { lat: number, lng: number } or { latitude: number, longitude: number }
-          const lat = data.lat || data.latitude
-          const lng = data.lng || data.longitude
-          
+          const lat = data.lat ?? data.latitude
+          const lng = data.lng ?? data.longitude
+
+          currentStore.setDeviceOnline(true)
+
           if (typeof lat === 'number' && typeof lng === 'number') {
-            setGpsCoords([lng, lat]) // Mapbox uses [lng, lat] format
-            console.log('[MQTT] GPS 更新:', { lng, lat })
+            currentStore.setGpsCoords([lng, lat])
+            console.log('[MQTT] GPS updated:', { lng, lat })
           }
         }
       } catch (error) {
-        console.error('[MQTT] 消息解析错误:', error)
+        console.error('[MQTT] Message parse error:', error)
       }
     })
 
-    // Error Handler
     client.on('error', (error) => {
-      console.error('[MQTT] 连接错误:', error)
+      console.error('[MQTT] Connection error:', error)
+      useIoTStore.getState().setMqttConnectionStatus('error')
       toast.error('MQTT 连接错误', {
         description: error.message,
       })
     })
 
-    // Disconnect Handler
     client.on('close', () => {
-      console.log('[MQTT] 连接断开')
-      setLwtStatus('offline')
+      console.log('[MQTT] Connection closed')
+      useIoTStore.getState().setMqttConnectionStatus('disconnected')
     })
 
-    // Reconnect Handler
     client.on('reconnect', () => {
-      console.log('[MQTT] 正在重新连接...')
+      console.log('[MQTT] Reconnecting...')
+      useIoTStore.getState().setMqttConnectionStatus('connecting')
       toast.info('正在重新连接', {
         description: '尝试恢复 MQTT 连接',
       })
     })
 
-    // Offline Handler
     client.on('offline', () => {
-      console.log('[MQTT] 客户端离线')
-      setLwtStatus('offline')
+      console.log('[MQTT] Client went offline')
+      useIoTStore.getState().setMqttConnectionStatus('disconnected')
     })
 
-    // Cleanup: Critical for Strict Mode
     return () => {
       if (clientRef.current) {
-        console.log('[MQTT] 清理连接...')
-        clientRef.current.end(true) // Force close
+        console.log('[MQTT] Cleaning up client connection')
+        clientRef.current.end(true)
         clientRef.current = null
       }
     }
-  }, []) // Empty dependency array - run once per mount
+  }, [])
 
   return clientRef.current
 }

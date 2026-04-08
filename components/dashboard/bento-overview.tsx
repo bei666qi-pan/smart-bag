@@ -20,8 +20,11 @@ import {
 import { useIoTStore } from "@/store/useIoTStore"
 
 export function BentoOverview() {
-  const { lwtStatus, battery, temp, humid } = useIoTStore()
-  const isOnline = lwtStatus === 'online'
+  const mqttConnectionStatus = useIoTStore((state) => state.mqttConnectionStatus)
+  const battery = useIoTStore((state) => state.battery)
+  const temp = useIoTStore((state) => state.temp)
+  const humid = useIoTStore((state) => state.humid)
+  const isOnline = mqttConnectionStatus === 'connected'
 
   return (
     <>
