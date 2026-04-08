@@ -21,7 +21,7 @@ export type IoTCmdAck = {
 export type PendingCommand = {
   cmd_id: string
   type: IoTCmdType
-  payload: Record<string, unknown>
+  value: string
   sentAt: string
 }
 
@@ -60,7 +60,7 @@ interface IoTState {
   setPendingCmd: (cmd: PendingCommand | null) => void
   setLastCmdAck: (ack: IoTCmdAck | null) => void
   setCmdError: (error: string | null) => void
-  publishCommand: (type: IoTCmdType, payload: Record<string, unknown>) => { ok: boolean; cmd_id?: string; error?: string }
+  publishCommand: (action: IoTCmdType, value: string) => { ok: boolean; cmd_id?: string; error?: string }
 
   fetchInitialState: () => Promise<void>
 }
@@ -128,7 +128,7 @@ export const useIoTStore = create<IoTState>((set) => ({
   setLastCmdAck: (ack) => set({ lastCmdAck: ack }),
   setCmdError: (error) => set({ cmdError: error }),
 
-  publishCommand: (type, payload) => {
+  publishCommand: (action, value) => {
     const state = useIoTStore.getState()
     const client = state.mqttClient
 
@@ -139,20 +139,25 @@ export const useIoTStore = create<IoTState>((set) => ({
       return { ok: false, error: 'MQTT 未连接，无法下发命令' }
     }
 
-    const cmd_id = `cmd_${Date.now()}_${Math.random().toString(16).slice(2, 6)}`
+    const cmd_id =
+      typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+        ? crypto.randomUUID()
+        : `cmd_${Date.now()}_${Math.random().toString(16).slice(2, 6)}`
     const sentAt = new Date().toISOString()
-    const body = JSON.stringify({ cmd_id, type, ...payload })
+    // Protocol: hardware expects { id, action, value }
+    // ACK: { cmd_id, status, msg }
+    const body = JSON.stringify({ id: cmd_id, action, value })
 
     try {
       state.setCmdError(null)
-      state.setPendingCmd({ cmd_id, type, payload, sentAt })
+      state.setPendingCmd({ cmd_id, type: action, value, sentAt })
 
       client.publish('v5/bag/cmd', body, { qos: 1 }, (err) => {
         if (err) {
           console.error('[MQTT] Publish command failed:', err)
           useIoTStore.getState().setCmdError(err.message)
         } else {
-          console.log('[MQTT] Command published:', { cmd_id, type })
+          console.log('[MQTT] Command published:', { cmd_id, action, value })
         }
       })
 

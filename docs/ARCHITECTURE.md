@@ -79,6 +79,8 @@ topics: {
   lwt: 'v5/bag/status',      // 设备在线/离线状态
   sensors: 'v5/bag/sensors', // 传感器数据 (温湿度/电量)
   gps: 'v5/bag/gps',         // GPS 坐标
+  cmd: 'v5/bag/cmd',         // 下发命令 (id/action/value)
+  cmdAck: 'v5/bag/cmd/ack',  // ACK (cmd_id/status/msg)
 }
 ```
 
@@ -108,6 +110,24 @@ topics: {
 }
 ```
 
+**Downlink Command (v5/bag/cmd):**
+```json
+{
+  "id": "uuid",
+  "action": "mode_switch" | "screen_text",
+  "value": "focus_mode" | "normal_mode" | "..."
+}
+```
+
+**Command ACK (v5/bag/cmd/ack):**
+```json
+{
+  "cmd_id": "same-as-id",
+  "status": 0,
+  "msg": "OK"
+}
+```
+
 ### 状态管理集成
 
 ```typescript
@@ -122,6 +142,8 @@ client.on('message', (topic, payload) => {
   }
 })
 ```
+
+> 重要：**MQTT Broker 连接成功 ≠ 设备在线**。设备在线仅以 `v5/bag/status` 的 `online/offline` 为准；API 初始化状态仅用于展示“初始拉取是否成功”，不应覆盖前两者语义。
 
 ### 错误处理
 

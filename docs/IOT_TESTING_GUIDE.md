@@ -56,11 +56,27 @@ mosquitto_pub -h localhost -t "v5/bag/gps" -m '{"lat":31.2400,"lng":121.4800}'
 - **下发**: `v5/bag/cmd`
 - **ACK**: `v5/bag/cmd/ack`
 
+下发命令结构（与软硬对接协议一致）：
+
+```json
+{"id":"<uuid>","action":"mode_switch","value":"focus_mode"}
+```
+
+```json
+{"id":"<uuid>","action":"mode_switch","value":"normal_mode"}
+```
+
+```json
+{"id":"<uuid>","action":"screen_text","value":"上课专注模式已开启"}
+```
+
 ACK 结构兼容示例:
 
 ```json
 {"cmd_id":"abc-123","status":0,"msg":"OK"}
 ```
+
+> 说明：前端内部会把 `id` 作为 `cmd_id` 跟踪 pending 命令；**Broker 已连接 ≠ 设备在线**（设备在线以 `v5/bag/status` 为准）。
 
 ---
 

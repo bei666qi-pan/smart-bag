@@ -21,10 +21,18 @@ import { useIoTStore } from "@/store/useIoTStore"
 
 export function BentoOverview() {
   const mqttConnectionStatus = useIoTStore((state) => state.mqttConnectionStatus)
+  const deviceOnline = useIoTStore((state) => state.deviceOnline)
+  const iotApiFetchStatus = useIoTStore((state) => state.iotApiFetchStatus)
   const battery = useIoTStore((state) => state.battery)
   const temp = useIoTStore((state) => state.temp)
   const humid = useIoTStore((state) => state.humid)
-  const isOnline = mqttConnectionStatus === 'connected'
+
+  const mqttLabel: Record<typeof mqttConnectionStatus, string> = {
+    connected: "已连接",
+    connecting: "连接中",
+    disconnected: "未连接",
+    error: "异常",
+  }
 
   return (
     <>
@@ -44,12 +52,45 @@ export function BentoOverview() {
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
           <Card className="border-border bg-card">
             <CardContent className="flex items-center gap-3 pt-6">
-              <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${isOnline ? 'bg-emerald-50' : 'bg-gray-50'}`}>
-                <Wifi className={`h-5 w-5 ${isOnline ? 'text-emerald-600' : 'text-gray-600'}`} />
+              <div
+                className={`flex h-10 w-10 items-center justify-center rounded-xl ${
+                  mqttConnectionStatus === "connected"
+                    ? "bg-emerald-50"
+                    : mqttConnectionStatus === "connecting"
+                      ? "bg-amber-50"
+                      : mqttConnectionStatus === "error"
+                        ? "bg-rose-50"
+                        : "bg-gray-50"
+                }`}
+              >
+                <Wifi
+                  className={`h-5 w-5 ${
+                    mqttConnectionStatus === "connected"
+                      ? "text-emerald-600"
+                      : mqttConnectionStatus === "connecting"
+                        ? "text-amber-600"
+                        : mqttConnectionStatus === "error"
+                          ? "text-rose-600"
+                          : "text-gray-600"
+                  }`}
+                />
               </div>
               <div className="flex flex-col">
-                <span className="text-xs text-muted-foreground">连接</span>
-                <span className="text-sm font-semibold text-foreground">{isOnline ? '在线' : '离线'}</span>
+                <span className="text-xs text-muted-foreground">MQTT（Broker）</span>
+                <span className="text-sm font-semibold text-foreground">{mqttLabel[mqttConnectionStatus]}</span>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="border-border bg-card">
+            <CardContent className="flex items-center gap-3 pt-6">
+              <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${deviceOnline ? "bg-sky-50" : "bg-gray-50"}`}>
+                <Backpack className={`h-5 w-5 ${deviceOnline ? "text-sky-600" : "text-gray-600"}`} />
+              </div>
+              <div className="flex flex-col">
+                <span className="text-xs text-muted-foreground">设备</span>
+                <span className="text-sm font-semibold text-foreground">{deviceOnline ? "在线" : "离线"}</span>
+                <span className="mt-0.5 text-[10px] text-muted-foreground">来自 v5/bag/status</span>
               </div>
             </CardContent>
           </Card>
@@ -89,6 +130,13 @@ export function BentoOverview() {
               </div>
             </CardContent>
           </Card>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+          <Badge variant="secondary" className="text-[10px]">
+            API 初始化：{iotApiFetchStatus}
+          </Badge>
+          <span className="text-[10px]">提示：Broker 已连接 ≠ 设备在线</span>
         </div>
 
         {/* Bento Grid */}

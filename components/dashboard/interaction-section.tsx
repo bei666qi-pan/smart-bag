@@ -33,6 +33,9 @@ export function InteractionSection() {
   const [screenText, setScreenText] = useState("上课专注模式已开启")
 
   const mqttConnectionStatus = useIoTStore((s) => s.mqttConnectionStatus)
+  const deviceOnline = useIoTStore((s) => s.deviceOnline)
+  const iotApiFetchStatus = useIoTStore((s) => s.iotApiFetchStatus)
+  const lastSeenAt = useIoTStore((s) => s.lastSeenAt)
   const pendingCmd = useIoTStore((s) => s.pendingCmd)
   const lastCmdAck = useIoTStore((s) => s.lastCmdAck)
   const cmdError = useIoTStore((s) => s.cmdError)
@@ -204,19 +207,49 @@ export function InteractionSection() {
           </CardHeader>
           <CardContent>
             <div className="flex flex-col gap-3">
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                <div className="rounded-lg border border-border bg-muted/20 p-2">
+                  <div className="text-[10px] text-muted-foreground">MQTT Broker</div>
+                  <div className="mt-0.5 font-mono text-xs text-foreground">{mqttConnectionStatus}</div>
+                </div>
+                <div className="rounded-lg border border-border bg-muted/20 p-2">
+                  <div className="text-[10px] text-muted-foreground">设备状态</div>
+                  <div className="mt-0.5 text-xs font-medium text-foreground">{deviceOnline ? "在线" : "离线"}</div>
+                </div>
+                <div className="rounded-lg border border-border bg-muted/20 p-2">
+                  <div className="text-[10px] text-muted-foreground">API 初始化</div>
+                  <div className="mt-0.5 font-mono text-xs text-foreground">{iotApiFetchStatus}</div>
+                </div>
+              </div>
+
               <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                <span className="font-mono">MQTT: {mqttConnectionStatus}</span>
+                <span className="font-mono">LastSeen: {lastSeenAt ?? "-"}</span>
                 <Separator orientation="vertical" className="h-4" />
-                <span className="font-mono">Pending: {pendingCmd ? pendingCmd.cmd_id : "-"}</span>
+                <span className="font-mono">待回执命令: {pendingCmd ? pendingCmd.cmd_id : "-"}</span>
                 <Separator orientation="vertical" className="h-4" />
                 <span className="font-mono">
-                  ACK: {lastCmdAck ? `${lastCmdAck.cmd_id} (status=${lastCmdAck.status})` : "-"}
+                  最近 ACK:{" "}
+                  {lastCmdAck
+                    ? `${lastCmdAck.status === 0 ? "成功" : "失败"} ${lastCmdAck.cmd_id}${lastCmdAck.ts ? ` @ ${lastCmdAck.ts}` : ""}`
+                    : "-"}
                 </span>
               </div>
 
               {cmdError && (
                 <div className="rounded-md border border-rose-200 bg-rose-50 p-2 text-xs text-rose-700">
-                  {cmdError}
+                  命令发送失败：{cmdError}
+                </div>
+              )}
+
+              {mqttConnectionStatus !== "connected" && (
+                <div className="rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">
+                  MQTT 未连接，命令下发已禁用。请先确认 Broker 连接状态为 connected。
+                </div>
+              )}
+
+              {mqttConnectionStatus === "connected" && !deviceOnline && (
+                <div className="rounded-md border border-sky-200 bg-sky-50 p-2 text-xs text-sky-800">
+                  Broker 已连接，但设备仍离线（未收到 v5/bag/status=online）。下发命令可能不会被设备处理。
                 </div>
               )}
 
@@ -224,18 +257,18 @@ export function InteractionSection() {
                 <Button
                   size="sm"
                   variant="outline"
-                  onClick={() => publishCommand("mode_switch", { mode: "focus" })}
+                  onClick={() => publishCommand("mode_switch", "focus_mode")}
                   disabled={mqttConnectionStatus !== "connected"}
                 >
-                  发送 mode_switch(focus)
+                  发送 mode_switch(focus_mode)
                 </Button>
                 <Button
                   size="sm"
                   variant="outline"
-                  onClick={() => publishCommand("mode_switch", { mode: "normal" })}
+                  onClick={() => publishCommand("mode_switch", "normal_mode")}
                   disabled={mqttConnectionStatus !== "connected"}
                 >
-                  发送 mode_switch(normal)
+                  发送 mode_switch(normal_mode)
                 </Button>
               </div>
 
@@ -248,7 +281,7 @@ export function InteractionSection() {
                 />
                 <Button
                   size="sm"
-                  onClick={() => publishCommand("screen_text", { text: screenText })}
+                  onClick={() => publishCommand("screen_text", screenText)}
                   disabled={mqttConnectionStatus !== "connected" || screenText.trim().length === 0}
                 >
                   发送 screen_text
@@ -269,9 +302,11 @@ export function InteractionSection() {
                       : "border-rose-200 bg-rose-50 text-rose-800"
                   }`}
                 >
-                  ACK：<span className="font-mono">{lastCmdAck.cmd_id}</span>，status=
-                  <span className="font-mono">{lastCmdAck.status}</span>
+                  ACK：<span className="font-mono">{lastCmdAck.cmd_id}</span>，
+                  {lastCmdAck.status === 0 ? "成功" : "失败"}（status=
+                  <span className="font-mono">{lastCmdAck.status}</span>）
                   {lastCmdAck.msg ? `，msg=${lastCmdAck.msg}` : ""}
+                  {lastCmdAck.ts ? `，时间=${lastCmdAck.ts}` : ""}
                 </div>
               )}
             </div>

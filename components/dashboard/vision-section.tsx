@@ -13,13 +13,10 @@ import { analyzeImageAction, ActionState } from "@/app/actions/analyze-image"
 import { toast } from "sonner"
 
 const aiLogs = [
-  { time: "14:32:05", message: "检测到:教科书 (数学),置信度 0.96", type: "info" as const },
-  { time: "14:32:03", message: "物体跟踪:画面中识别出 3 个物品", type: "info" as const },
-  { time: "14:31:58", message: "姿态分析:正常坐姿", type: "success" as const },
-  { time: "14:31:45", message: "光线条件:充足 (420 lux)", type: "info" as const },
-  { time: "14:31:30", message: "警告:检测到短暂光线不足", type: "warning" as const },
-  { time: "14:31:15", message: "场景分类:教室环境", type: "info" as const },
-  { time: "14:31:00", message: "模型推理延迟:23ms", type: "info" as const },
+  { time: "14:32:05", message: "示例：检测到教科书（数学）", type: "info" as const },
+  { time: "14:32:03", message: "示例：物体跟踪结果已生成", type: "info" as const },
+  { time: "14:31:58", message: "示例：姿态分析（演示数据）", type: "success" as const },
+  { time: "14:31:45", message: "示例：光线条件评估（演示数据）", type: "info" as const },
 ]
 
 const initialState: ActionState = {
@@ -148,9 +145,9 @@ export function VisionSection() {
                     />
                   ) : (
                     <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 px-6 text-center">
-                      <p className="text-sm font-medium text-foreground">当前未配置公网视频流</p>
+                      <p className="text-sm font-medium text-foreground">未配置视频流地址</p>
                       <p className="text-xs text-muted-foreground">
-                        生产环境不再默认使用 192.168.x.x。请配置 NEXT_PUBLIC_ESP32_STREAM_URL，或切换到“广域网”模式使用 API 快照。
+                        开发环境可使用局域网地址；生产环境请配置公网可访问的 NEXT_PUBLIC_ESP32_STREAM_URL，或切换到“广域网”模式使用 API 快照。
                       </p>
                     </div>
                   )
@@ -200,9 +197,9 @@ export function VisionSection() {
 
                 {/* Status overlay */}
                 <div className="absolute left-3 top-3 z-10">
-                  <Badge variant="secondary" className="bg-red-50 text-red-600 border-red-200 text-xs">
-                    <span className="mr-1.5 inline-block h-1.5 w-1.5 rounded-full bg-red-500" />
-                    录制
+                  <Badge variant="secondary" className="bg-gray-50 text-gray-700 border-gray-200 text-xs">
+                    <span className="mr-1.5 inline-block h-1.5 w-1.5 rounded-full bg-gray-500" />
+                    预览
                   </Badge>
                 </div>
                 <div className="absolute bottom-3 right-3 z-10">
@@ -241,10 +238,13 @@ export function VisionSection() {
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2 text-sm font-medium text-foreground">
                 <Brain className="h-4 w-4" />
-                人工智能分析
+                人工智能分析（演示）
               </CardTitle>
             </CardHeader>
             <CardContent>
+              <p className="mb-2 text-xs text-muted-foreground">
+                下方“示例日志”为演示数据；真实结果以点击“AI 分析”后的返回内容为准。
+              </p>
               <ScrollArea className="h-64 lg:h-72">
                 <div className="flex flex-col gap-2 pr-3">
                   {/* Show latest analysis result */}
