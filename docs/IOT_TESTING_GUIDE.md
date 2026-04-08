@@ -2,6 +2,11 @@
 
 ## 1. MQTT 测试
 
+### 线上/现网 MQTT 地址说明
+
+- **硬件 MQTT (TCP)**: `mqtt.bag.versecraft.cn:1883`
+- **前端 MQTT (WebSocket)**: `wss://mqtt.bag.versecraft.cn`（如有路径以服务端实际配置为准）
+
 ### 安装 Mosquitto (本地测试)
 
 **Windows:**
@@ -46,6 +51,17 @@ mosquitto_pub -h localhost -t "v5/bag/gps" -m '{"lat":31.2304,"lng":121.4737}'
 mosquitto_pub -h localhost -t "v5/bag/gps" -m '{"lat":31.2400,"lng":121.4800}'
 ```
 
+#### 命令下发与 ACK（最小闭环）
+
+- **下发**: `v5/bag/cmd`
+- **ACK**: `v5/bag/cmd/ack`
+
+ACK 结构兼容示例:
+
+```json
+{"cmd_id":"abc-123","status":0,"msg":"OK"}
+```
+
 ---
 
 ## 2. Vision Pipeline 测试
@@ -67,6 +83,8 @@ server.on("/stream", HTTP_GET, handle_jpg_stream);
 # 浏览器访问
 http://<ESP32_IP>:81/stream
 ```
+
+> 说明: **局域网直连仅适合开发/同网段测试**。生产环境不应默认依赖 `192.168.x.x`，建议通过公网代理/中转或使用“广域网模式”走 `/api/camera/latest` 快照链路。
 
 ### 广域网模式 (ESP32 上传快照)
 
@@ -148,17 +166,23 @@ curl -X POST https://api.coze.cn/v3/chat \
 
 ---
 
-## 4. Mapbox 地图测试
+## 4. AMap(高德) 地图测试
 
-### 获取 Mapbox Token
+### 配置 AMap Key 与安全密钥
 
-1. 访问 [Mapbox Account](https://account.mapbox.com/access-tokens/)
-2. 创建 Public Token
-3. 配置环境变量:
+在 `.env.local` 配置:
 
 ```bash
-NEXT_PUBLIC_MAPBOX_TOKEN=pk.eyJ1...
+NEXT_PUBLIC_AMAP_KEY=your_key
+NEXT_PUBLIC_AMAP_SECURITY_CODE=your_security_code
 ```
+
+### 域名白名单说明（解决 INVALID_USER_DOMAIN）
+
+请在高德控制台为 Key 配置域名白名单，至少包含:
+
+- `localhost`
+- `bag.versecraft.cn`
 
 ### 测试 GPS 实时更新
 
@@ -227,6 +251,7 @@ echo "✅ 测试完成!"
 1. **MQTT 连接**
    - TopBar 显示 "MQTT 在线" 绿色徽章
    - Toast 提示 "MQTT 连接成功"
+   - TopBar 额外显示 **API 拉取状态** 与 **设备在线状态**（三态区分）
 
 2. **传感器数据**
    - TopBar 实时更新温度、湿度、电量
@@ -238,7 +263,7 @@ echo "✅ 测试完成!"
    - AI 分析: 点击按钮后显示 Coze 返回结果
 
 4. **Location Tracking**
-   - 地图加载 Mapbox 底图
+   - 地图加载 AMap(高德) 底图
    - GPS 点发布后,蓝色 Marker 移动
    - 轨迹线实时绘制
    - **关键**: React DevTools 不显示组件重渲染
@@ -257,10 +282,12 @@ echo "✅ 测试完成!"
 解决: 检查 Mosquitto 是否配置 WebSocket listener (端口 8083)
 ```
 
-### Mapbox 不加载
+### AMap 不加载 / INVALID_USER_DOMAIN
 ```
-错误: Map failed to load
-解决: 验证 NEXT_PUBLIC_MAPBOX_TOKEN 是否正确配置
+错误: INVALID_USER_DOMAIN
+解决:
+1) 确认 NEXT_PUBLIC_AMAP_KEY 与 NEXT_PUBLIC_AMAP_SECURITY_CODE 已配置
+2) 在高德控制台为 Key 配置域名白名单（localhost / bag.versecraft.cn）
 ```
 
 ### Coze API 401
@@ -283,7 +310,7 @@ echo "✅ 测试完成!"
 ## 8. 生产部署检查清单
 
 - [ ] 配置真实 MQTT Broker (EMQ X / HiveMQ Cloud)
-- [ ] 设置 Mapbox Token 域名限制
+- [ ] 配置 AMap Key 域名白名单
 - [ ] Coze Token 加密存储 (环境变量)
 - [ ] ESP32 固件 OTA 更新机制
 - [ ] HTTPS 强制 (Nginx 反向代理)

@@ -37,12 +37,21 @@ export function TopBar() {
   const pathname = usePathname()
   const mqttConnectionStatus = useIoTStore((state) => state.mqttConnectionStatus)
   const deviceOnline = useIoTStore((state) => state.deviceOnline)
+  const iotApiFetchStatus = useIoTStore((state) => state.iotApiFetchStatus)
   const battery = useIoTStore((state) => state.battery)
   const temp = useIoTStore((state) => state.temp)
   const humid = useIoTStore((state) => state.humid)
 
   const currentLabel = viewLabels[pathname] || "\u4eea\u8868\u76d8"
   const mqttOnline = mqttConnectionStatus === "connected"
+  const apiBadge =
+    iotApiFetchStatus === "success"
+      ? { label: "API 正常", className: "bg-emerald-50 text-emerald-700 border-emerald-200" }
+      : iotApiFetchStatus === "loading"
+        ? { label: "API 拉取中", className: "bg-amber-50 text-amber-700 border-amber-200" }
+        : iotApiFetchStatus === "error"
+          ? { label: "API 异常", className: "bg-rose-50 text-rose-700 border-rose-200" }
+          : { label: "API 未拉取", className: "bg-gray-50 text-gray-700 border-gray-200" }
 
   return (
     <header className="flex h-14 shrink-0 items-center justify-between border-b border-border bg-card px-6">
@@ -88,6 +97,23 @@ export function TopBar() {
           >
             {"\u8bbe\u5907 "}
             {deviceOnline ? "\u5728\u7ebf" : "\u79bb\u7ebf"}
+          </Badge>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <span
+            className={`inline-flex h-2 w-2 rounded-full ${
+              iotApiFetchStatus === "success"
+                ? "bg-emerald-500"
+                : iotApiFetchStatus === "loading"
+                  ? "bg-amber-500"
+                  : iotApiFetchStatus === "error"
+                    ? "bg-rose-500"
+                    : "bg-gray-400"
+            }`}
+          />
+          <Badge variant="secondary" className={`${apiBadge.className} text-xs font-medium`}>
+            {apiBadge.label}
           </Badge>
         </div>
 

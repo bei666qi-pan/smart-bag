@@ -22,7 +22,7 @@
 │         ┌────────────────────┼────────────────────┐             │
 │         │                    │                    │             │
 │  ┌──────▼──────┐    ┌────────▼──────┐    ┌───────▼──────┐     │
-│  │ useMqttClient│    │ Mapbox GL JS  │    │ Server Action│     │
+│  │ useMqttClient│    │ AMap JS API   │    │ Server Action│     │
 │  │   (Hook)     │    │(Zero-Render)  │    │  (Coze API)  │     │
 │  └──────────────┘    └───────────────┘    └──────────────┘     │
 │         ▲                    ▲                    ▲             │
@@ -216,7 +216,7 @@ experimental: {
 
 ---
 
-## 🗺️ 3. Zero-Render Mapbox Integration
+## 🗺️ 3. Zero-Render AMap Integration
 
 ### Golden Pattern D: Imperative Updates
 
@@ -251,36 +251,24 @@ useEffect(() => {
 
 1. **初始化 (仅一次)**
 ```typescript
-const mapRef = useRef<mapboxgl.Map | null>(null)
-const markerRef = useRef<mapboxgl.Marker | null>(null)
+const mapRef = useRef<any | null>(null)
+const markerRef = useRef<any | null>(null)
 
 useEffect(() => {
   if (mapRef.current) return // 防止重复初始化
   
-  const map = new mapboxgl.Map({
-    container: mapContainerRef.current,
-    center: [121.4737, 31.2304],
-    zoom: 15,
-  })
+  const map = new (window as any).AMap.Map(mapContainerRef.current, { zoom: 15 })
   
   mapRef.current = map
 }, [])
 ```
 
-2. **GeoJSON Source 更新**
+2. **安全检查**
 ```typescript
-const source = map.getSource('trace') as mapboxgl.GeoJSONSource
-source.setData({
-  type: 'FeatureCollection',
-  features: [...existingPoints, newPoint],
-})
-```
+const key = process.env.NEXT_PUBLIC_AMAP_KEY
+const security = process.env.NEXT_PUBLIC_AMAP_SECURITY_CODE
 
-3. **安全检查**
-```typescript
-const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN
-
-if (!token || token === 'your_mapbox_token_here') {
+if (!key || !security) {
   toast.error('地图配置错误')
   return
 }
@@ -340,28 +328,32 @@ useEffect(() => {
 
 ```bash
 # MQTT
-NEXT_PUBLIC_MQTT_URL=ws://broker.hivemq.com:8000/mqtt
+NEXT_PUBLIC_MQTT_URL=wss://mqtt.bag.versecraft.cn
 
-# Mapbox
-NEXT_PUBLIC_MAPBOX_TOKEN=pk.eyJ1...
+# MQTT (Server daemon, TCP)
+MQTT_SERVER_URL=mqtt://mqtt.bag.versecraft.cn:1883
+
+# AMap
+NEXT_PUBLIC_AMAP_KEY=your_key
+NEXT_PUBLIC_AMAP_SECURITY_CODE=your_security_code
 
 # Coze AI
 COZE_TOKEN=pat_xxx...
 COZE_BOT_ID=7xxx...
 
 # ESP32
-NEXT_PUBLIC_ESP32_STREAM_URL=http://192.168.1.100:81/stream
+NEXT_PUBLIC_ESP32_STREAM_URL=http://<YOUR_STREAM_HOST>/stream
 ```
 
 ### 安全规范
 
 1. **Public vs Private:**
-   - `NEXT_PUBLIC_*`: 暴露给客户端 (Mapbox, MQTT URL)
+   - `NEXT_PUBLIC_*`: 暴露给客户端 (AMap, MQTT URL)
    - 无前缀: 仅服务器端 (Coze Token)
 
 2. **Token 管理:**
    - Coze Token: 服务器端专用
-   - Mapbox Token: Public,但添加域名白名单
+   - AMap Key: Public,但需要配置域名白名单与安全密钥
 
 ---
 
@@ -408,7 +400,7 @@ return {
 | **框架** | Next.js | 16.1.6 | App Router + Server Actions |
 | **状态管理** | Zustand | 5.0.11 | 全局 IoT 状态 |
 | **IoT 通信** | mqtt.js | Latest | WebSocket MQTT 客户端 |
-| **地图渲染** | mapbox-gl | Latest | 零渲染地图更新 |
+| **地图渲染** | AMap JS API | Latest | 零渲染地图更新 |
 | **AI 推理** | Coze REST API | v3 | 图像分析 |
 | **UI 组件** | shadcn/ui | - | Radix UI 封装 |
 | **提示组件** | sonner | 1.7.1 | Toast 通知 |
@@ -440,7 +432,7 @@ return {
 ```
 [MQTT] 连接成功
 [MQTT] GPS 更新: [121.4737, 31.2304]
-[Mapbox] 地图加载完成
+[AMap] 地图加载完成
 [Coze] 正在调用大模型分析...
 ```
 
@@ -451,13 +443,13 @@ return {
 ### 开发环境
 - [x] 安装 Mosquitto (本地 MQTT Broker)
 - [x] 配置 `.env.local`
-- [x] 获取 Mapbox Token
+- [x] 配置 AMap Key
 - [x] 注册 Coze 账号
 
 ### 生产环境
 - [ ] 使用云端 MQTT (HiveMQ Cloud / EMQ X Cloud)
 - [ ] 配置 MQTT TLS 加密
-- [ ] 设置 Mapbox Token 域名限制
+- [ ] 配置 AMap Key 域名白名单
 - [ ] Coze API Rate Limiting
 - [ ] Nginx 反向代理 ESP32 流
 - [ ] 日志收集 (Winston)

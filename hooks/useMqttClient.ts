@@ -12,6 +12,7 @@ interface MqttConfig {
     lwt: string
     sensors: string
     gps: string
+    cmdAck: string
   }
 }
 
@@ -22,6 +23,7 @@ const DEFAULT_CONFIG: MqttConfig = {
     lwt: 'v5/bag/status',
     sensors: 'v5/bag/sensors',
     gps: 'v5/bag/gps',
+    cmdAck: 'v5/bag/cmd/ack',
   },
 }
 
@@ -62,6 +64,7 @@ export function useMqttClient(config: Partial<MqttConfig> = {}) {
     })
 
     clientRef.current = client
+    useIoTStore.getState().setMqttClient(client)
 
     client.on('connect', () => {
       console.log('[MQTT] Connected to broker')
@@ -109,8 +112,6 @@ export function useMqttClient(config: Partial<MqttConfig> = {}) {
         }
 
         if (topic === finalConfig.topics.sensors) {
-          currentStore.setDeviceOnline(true)
-
           if (typeof data.battery === 'number') {
             currentStore.setBattery(data.battery)
           }
@@ -127,11 +128,42 @@ export function useMqttClient(config: Partial<MqttConfig> = {}) {
           const lat = data.lat ?? data.latitude
           const lng = data.lng ?? data.longitude
 
-          currentStore.setDeviceOnline(true)
-
           if (typeof lat === 'number' && typeof lng === 'number') {
             currentStore.setGpsCoords([lng, lat])
             console.log('[MQTT] GPS updated:', { lng, lat })
+          }
+          return
+        }
+
+        if (topic === finalConfig.topics.cmdAck) {
+          const cmd_id = data.cmd_id
+          const status = data.status
+          const msg = data.msg
+
+          if (typeof cmd_id === 'string' && typeof status === 'number') {
+            currentStore.setLastCmdAck({
+              cmd_id,
+              status,
+              msg: typeof msg === 'string' ? msg : undefined,
+              ts: new Date().toISOString(),
+            })
+
+            const pending = currentStore.pendingCmd
+            if (pending?.cmd_id === cmd_id) {
+              currentStore.setPendingCmd(null)
+            }
+
+            if (status === 0) {
+              toast.success('命令执行成功', {
+                description: msg || `cmd_id: ${cmd_id}`,
+              })
+            } else {
+              toast.error('命令执行失败', {
+                description: msg || `cmd_id: ${cmd_id}`,
+              })
+            }
+          } else {
+            console.warn('[MQTT] Invalid cmd/ack payload:', data)
           }
         }
       } catch (error) {
@@ -170,9 +202,10 @@ export function useMqttClient(config: Partial<MqttConfig> = {}) {
         console.log('[MQTT] Cleaning up client connection')
         clientRef.current.end(true)
         clientRef.current = null
+        const state = useIoTStore.getState()
+        state.setMqttClient(null)
+        state.setMqttConnectionStatus('disconnected')
       }
     }
   }, [])
-
-  return clientRef.current
 }

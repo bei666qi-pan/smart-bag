@@ -6,6 +6,8 @@ import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { Separator } from "@/components/ui/separator"
+import { useIoTStore } from "@/store/useIoTStore"
 import {
   MessageCircle,
   Send,
@@ -28,6 +30,13 @@ export function InteractionSection() {
   const [focusMinutes, setFocusMinutes] = useState(25)
   const [focusSeconds, setFocusSeconds] = useState(0)
   const [isFocusRunning, setIsFocusRunning] = useState(false)
+  const [screenText, setScreenText] = useState("上课专注模式已开启")
+
+  const mqttConnectionStatus = useIoTStore((s) => s.mqttConnectionStatus)
+  const pendingCmd = useIoTStore((s) => s.pendingCmd)
+  const lastCmdAck = useIoTStore((s) => s.lastCmdAck)
+  const cmdError = useIoTStore((s) => s.cmdError)
+  const publishCommand = useIoTStore((s) => s.publishCommand)
 
   useEffect(() => {
     let interval: NodeJS.Timeout | null = null
@@ -188,6 +197,86 @@ export function InteractionSection() {
             </CardContent>
           </Card>
         </div>
+
+        <Card className="border-border bg-card">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-medium text-foreground">IoT 命令调试面板</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-col gap-3">
+              <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                <span className="font-mono">MQTT: {mqttConnectionStatus}</span>
+                <Separator orientation="vertical" className="h-4" />
+                <span className="font-mono">Pending: {pendingCmd ? pendingCmd.cmd_id : "-"}</span>
+                <Separator orientation="vertical" className="h-4" />
+                <span className="font-mono">
+                  ACK: {lastCmdAck ? `${lastCmdAck.cmd_id} (status=${lastCmdAck.status})` : "-"}
+                </span>
+              </div>
+
+              {cmdError && (
+                <div className="rounded-md border border-rose-200 bg-rose-50 p-2 text-xs text-rose-700">
+                  {cmdError}
+                </div>
+              )}
+
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => publishCommand("mode_switch", { mode: "focus" })}
+                  disabled={mqttConnectionStatus !== "connected"}
+                >
+                  发送 mode_switch(focus)
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => publishCommand("mode_switch", { mode: "normal" })}
+                  disabled={mqttConnectionStatus !== "connected"}
+                >
+                  发送 mode_switch(normal)
+                </Button>
+              </div>
+
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                <Input
+                  value={screenText}
+                  onChange={(e) => setScreenText(e.target.value)}
+                  placeholder="输入 screen_text 文本..."
+                  className="text-sm"
+                />
+                <Button
+                  size="sm"
+                  onClick={() => publishCommand("screen_text", { text: screenText })}
+                  disabled={mqttConnectionStatus !== "connected" || screenText.trim().length === 0}
+                >
+                  发送 screen_text
+                </Button>
+              </div>
+
+              {pendingCmd && (
+                <div className="rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">
+                  命令已下发，等待 ACK。cmd_id: <span className="font-mono">{pendingCmd.cmd_id}</span>
+                </div>
+              )}
+
+              {lastCmdAck && (
+                <div
+                  className={`rounded-md border p-2 text-xs ${
+                    lastCmdAck.status === 0
+                      ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                      : "border-rose-200 bg-rose-50 text-rose-800"
+                  }`}
+                >
+                  ACK：<span className="font-mono">{lastCmdAck.cmd_id}</span>，status=
+                  <span className="font-mono">{lastCmdAck.status}</span>
+                  {lastCmdAck.msg ? `，msg=${lastCmdAck.msg}` : ""}
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
       </div>
       {/* <!-- /SECTION:INTERACTION --> */}
     </>

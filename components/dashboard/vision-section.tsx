@@ -30,7 +30,13 @@ const initialState: ActionState = {
 export function VisionSection() {
   const [isWan, setIsWan] = useState(false)
   const [imageUrl, setImageUrl] = useState<string>('')
+  const [streamError, setStreamError] = useState<string | null>(null)
   const [state, formAction, isPending] = useActionState(analyzeImageAction, initialState)
+
+  const isProd = process.env.NODE_ENV === 'production'
+  const configuredStreamUrl = process.env.NEXT_PUBLIC_ESP32_STREAM_URL
+  const devFallbackLanUrl = 'http://192.168.1.100:81/stream'
+  const lanStreamUrl = configuredStreamUrl || (isProd ? '' : devFallbackLanUrl)
 
   // WAN Mode: Poll for latest snapshot
   useEffect(() => {
@@ -72,8 +78,8 @@ export function VisionSection() {
         blob = await response.blob()
       } else {
         // Fetch from ESP32 direct stream
-        const esp32Url = process.env.NEXT_PUBLIC_ESP32_STREAM_URL || 'http://192.168.1.100:81/stream'
-        const response = await fetch(esp32Url)
+        if (!lanStreamUrl) throw new Error('当前未配置局域网视频流地址')
+        const response = await fetch(lanStreamUrl)
         if (!response.ok) throw new Error('获取 ESP32 流失败')
         blob = await response.blob()
       }
@@ -88,9 +94,7 @@ export function VisionSection() {
     }
   }
 
-  const streamUrl = isWan 
-    ? imageUrl 
-    : process.env.NEXT_PUBLIC_ESP32_STREAM_URL || 'http://192.168.1.100:81/stream'
+  const streamUrl = isWan ? imageUrl : lanStreamUrl
 
   return (
     <>
@@ -117,7 +121,10 @@ export function VisionSection() {
                   <Switch
                     id="stream-mode"
                     checked={isWan}
-                    onCheckedChange={setIsWan}
+                    onCheckedChange={(v) => {
+                      setStreamError(null)
+                      setIsWan(v)
+                    }}
                   />
                 </div>
               </div>
@@ -127,15 +134,26 @@ export function VisionSection() {
                 {/* Video Stream */}
                 {!isWan ? (
                   // LAN Mode: Direct ESP32 MJPEG Stream
-                  <img
-                    src={streamUrl}
-                    alt="ESP32 实时流"
-                    className="absolute inset-0 h-full w-full object-cover"
-                    onError={(e) => {
-                      console.error('[Vision] ESP32 流加载失败')
-                      e.currentTarget.style.display = 'none'
-                    }}
-                  />
+                  streamUrl ? (
+                    <img
+                      src={streamUrl}
+                      alt="ESP32 实时流"
+                      className="absolute inset-0 h-full w-full object-cover"
+                      onError={() => {
+                        if (!streamError) {
+                          console.error('[Vision] ESP32 流加载失败')
+                          setStreamError('局域网视频流加载失败，请检查网络与地址配置')
+                        }
+                      }}
+                    />
+                  ) : (
+                    <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 px-6 text-center">
+                      <p className="text-sm font-medium text-foreground">当前未配置公网视频流</p>
+                      <p className="text-xs text-muted-foreground">
+                        生产环境不再默认使用 192.168.x.x。请配置 NEXT_PUBLIC_ESP32_STREAM_URL，或切换到“广域网”模式使用 API 快照。
+                      </p>
+                    </div>
+                  )
                 ) : (
                   // WAN Mode: Polling snapshot
                   imageUrl ? (
@@ -145,7 +163,10 @@ export function VisionSection() {
                       alt="远程快照"
                       className="absolute inset-0 h-full w-full object-cover"
                       onError={() => {
-                        console.error('[Vision] 快照加载失败')
+                        if (!streamError) {
+                          console.error('[Vision] 快照加载失败')
+                          setStreamError('快照加载失败，请检查 /api/camera/latest 是否可用')
+                        }
                       }}
                     />
                   ) : (
@@ -154,6 +175,12 @@ export function VisionSection() {
                       <p className="text-sm text-muted-foreground">等待快照...</p>
                     </div>
                   )
+                )}
+
+                {streamError && (
+                  <div className="absolute inset-x-3 bottom-14 z-10 rounded-lg border border-rose-200 bg-rose-50/90 p-2 text-xs text-rose-700 backdrop-blur-sm">
+                    {streamError}
+                  </div>
                 )}
 
                 {/* Fallback placeholder */}
