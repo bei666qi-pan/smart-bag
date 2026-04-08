@@ -66,15 +66,15 @@ export function useMqttClient(config: Partial<MqttConfig> = {}) {
     client.on('connect', () => {
       console.log('[MQTT] Connected to broker')
       useIoTStore.getState().setMqttConnectionStatus('connected')
-      toast.success('MQTT 连接成功', {
-        description: '已连接到 MQTT Broker',
+      toast.success('MQTT \u8fde\u63a5\u6210\u529f', {
+        description: '\u5df2\u8fde\u63a5\u5230 MQTT Broker',
       })
 
       const topics = Object.values(finalConfig.topics)
       client.subscribe(topics, (error) => {
         if (error) {
           console.error('[MQTT] Subscribe failed:', error)
-          toast.error('订阅失败', {
+          toast.error('\u8ba2\u9605\u5931\u8d25', {
             description: error.message,
           })
           return
@@ -96,13 +96,13 @@ export function useMqttClient(config: Partial<MqttConfig> = {}) {
         if (topic === finalConfig.topics.lwt) {
           if (data.status === 'offline') {
             currentStore.setDeviceOnline(false)
-            toast.warning('设备离线', {
-              description: '智能书包已断开连接',
+            toast.warning('\u8bbe\u5907\u79bb\u7ebf', {
+              description: '\u667a\u80fd\u4e66\u5305\u5df2\u65ad\u5f00\u8fde\u63a5',
             })
           } else if (data.status === 'online') {
             currentStore.setDeviceOnline(true)
-            toast.success('设备在线', {
-              description: '智能书包已恢复连接',
+            toast.success('\u8bbe\u5907\u5728\u7ebf', {
+              description: '\u667a\u80fd\u4e66\u5305\u5df2\u6062\u590d\u8fde\u63a5',
             })
           }
           return
@@ -142,7 +142,7 @@ export function useMqttClient(config: Partial<MqttConfig> = {}) {
     client.on('error', (error) => {
       console.error('[MQTT] Connection error:', error)
       useIoTStore.getState().setMqttConnectionStatus('error')
-      toast.error('MQTT 连接错误', {
+      toast.error('MQTT \u8fde\u63a5\u9519\u8bef', {
         description: error.message,
       })
     })
@@ -155,8 +155,8 @@ export function useMqttClient(config: Partial<MqttConfig> = {}) {
     client.on('reconnect', () => {
       console.log('[MQTT] Reconnecting...')
       useIoTStore.getState().setMqttConnectionStatus('connecting')
-      toast.info('正在重新连接', {
-        description: '尝试恢复 MQTT 连接',
+      toast.info('\u6b63\u5728\u91cd\u65b0\u8fde\u63a5', {
+        description: '\u6b63\u5728\u5c1d\u8bd5\u6062\u590d MQTT \u8fde\u63a5',
       })
     })
 
