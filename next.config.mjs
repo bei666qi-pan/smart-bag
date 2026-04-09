@@ -18,7 +18,6 @@ const nextConfig = {
     ],
   },
   experimental: {
-    instrumentationHook: true,
     serverActions: {
       bodySizeLimit: '10mb',
     },

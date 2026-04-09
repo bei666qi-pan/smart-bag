@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { startRedisBackedMqttDaemon } from '@/lib/iot/redis-mqtt-daemon'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -35,6 +36,10 @@ async function loadRedisConstructor(): Promise<RedisConstructor> {
 }
 
 export async function GET() {
+  // Best-effort: ensure server daemon is started in deployments where instrumentation is not triggered reliably.
+  // Do not block response on daemon connectivity.
+  void startRedisBackedMqttDaemon()
+
   if (!process.env.REDIS_URL) {
     console.warn('[API] REDIS_URL is not configured, returning fallback IoT state')
     return NextResponse.json(createFallbackState('redis_unconfigured'))
