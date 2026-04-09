@@ -28,6 +28,8 @@ export function LocationSection() {
   const pathPointsRef = useRef<any[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [mapReady, setMapReady] = useState(false)
+  const gpsCoords = useIoTStore((state) => state.gpsCoords)
+  const lastSeenAt = useIoTStore((state) => state.lastSeenAt)
 
   // Map Initialization with STRICT RULES + Async Race Condition Fix
   useEffect(() => {
@@ -422,13 +424,18 @@ export function LocationSection() {
 
                     <div className="absolute bottom-3 right-3 z-10">
                       <Badge variant="secondary" className="font-mono text-[10px] bg-white/90 backdrop-blur-sm">
-                        31.2304°N, 121.4737°E
+                        {gpsCoords
+                          ? `${gpsCoords[1].toFixed(6)}°N, ${gpsCoords[0].toFixed(6)}°E`
+                          : '等待 GPS...'}
                       </Badge>
                     </div>
 
                     <div className="absolute bottom-3 left-3 z-10">
                       <Badge variant="outline" className="text-[10px] bg-white/90 backdrop-blur-sm">
                         GCJ-02 (火星坐标系)
+                      </Badge>
+                      <Badge variant="secondary" className="mt-2 text-[10px] font-mono bg-white/90 backdrop-blur-sm">
+                        LastSeen: {lastSeenAt ?? '-'}
                       </Badge>
                     </div>
                   </>

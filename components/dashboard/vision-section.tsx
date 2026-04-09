@@ -33,7 +33,51 @@ export function VisionSection() {
   const isProd = process.env.NODE_ENV === 'production'
   const configuredStreamUrl = process.env.NEXT_PUBLIC_ESP32_STREAM_URL
   const devFallbackLanUrl = 'http://192.168.1.100:81/stream'
-  const lanStreamUrl = configuredStreamUrl || (isProd ? '' : devFallbackLanUrl)
+  const rawLanStreamUrl = configuredStreamUrl || (isProd ? '' : devFallbackLanUrl)
+
+  const [streamWarning, setStreamWarning] = useState<string | null>(null)
+
+  function isPrivateHostname(hostname: string) {
+    const host = hostname.toLowerCase()
+    if (host === 'localhost' || host === '127.0.0.1') return true
+    if (/^10\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(host)) return true
+    if (/^192\.168\.\d{1,3}\.\d{1,3}$/.test(host)) return true
+    const m = host.match(/^172\.(\d{1,2})\.\d{1,3}\.\d{1,3}$/)
+    if (m) {
+      const second = Number(m[1])
+      if (second >= 16 && second <= 31) return true
+    }
+    return false
+  }
+
+  function validateStreamUrl(url: string) {
+    if (!url) return { ok: false, reason: '未配置视频流地址' }
+    try {
+      const parsed = new URL(url)
+      const isHttpsPage = typeof window !== 'undefined' && window.location.protocol === 'https:'
+      if (isHttpsPage && parsed.protocol === 'http:') {
+        return { ok: false, reason: '当前页面为 HTTPS，HTTP 视频流会触发混合内容拦截，请使用 HTTPS 或走广域网快照模式' }
+      }
+      if (isProd && isPrivateHostname(parsed.hostname)) {
+        return { ok: false, reason: '生产环境不建议使用局域网地址作为视频流，请配置公网可达地址或使用广域网快照模式' }
+      }
+      return { ok: true as const }
+    } catch {
+      return { ok: false, reason: '视频流地址格式无效' }
+    }
+  }
+
+  const validation = validateStreamUrl(rawLanStreamUrl)
+  const lanStreamUrl = validation.ok ? rawLanStreamUrl : ''
+
+  useEffect(() => {
+    if (!isWan && !validation.ok) {
+      setStreamWarning(validation.reason)
+    } else {
+      setStreamWarning(null)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isWan, rawLanStreamUrl, isProd])
 
   // WAN Mode: Poll for latest snapshot
   useEffect(() => {
@@ -149,6 +193,11 @@ export function VisionSection() {
                       <p className="text-xs text-muted-foreground">
                         开发环境可使用局域网地址；生产环境请配置公网可访问的 NEXT_PUBLIC_ESP32_STREAM_URL，或切换到“广域网”模式使用 API 快照。
                       </p>
+                      {streamWarning && (
+                        <p className="text-xs text-amber-700">
+                          {streamWarning}
+                        </p>
+                      )}
                     </div>
                   )
                 ) : (

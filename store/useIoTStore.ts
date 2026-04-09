@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { subscribeWithSelector } from 'zustand/middleware'
 import type { MqttClient } from 'mqtt'
 
 export type MqttConnectionStatus =
@@ -71,7 +72,8 @@ function logStateTransition(label: string, previous: unknown, next: unknown) {
   }
 }
 
-export const useIoTStore = create<IoTState>((set) => ({
+export const useIoTStore = create<IoTState>()(
+  subscribeWithSelector((set) => ({
   mqttConnectionStatus: 'disconnected',
   iotApiFetchStatus: 'idle',
   iotApiError: null,
@@ -206,3 +208,4 @@ export const useIoTStore = create<IoTState>((set) => ({
     }
   },
 }))
+)

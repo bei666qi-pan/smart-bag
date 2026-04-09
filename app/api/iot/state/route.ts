@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 
 export const dynamic = 'force-dynamic'
+export const runtime = 'nodejs'
 
 type RedisClientLike = {
   hgetall: (key: string) => Promise<Record<string, string>>
@@ -42,7 +43,14 @@ export async function GET() {
   let redis: RedisClientLike | null = null
 
   try {
-    const Redis = await loadRedisConstructor()
+    let Redis: RedisConstructor
+    try {
+      Redis = await loadRedisConstructor()
+    } catch (importError) {
+      console.error('[API] Failed to import ioredis:', importError)
+      return NextResponse.json(createFallbackState('redis_import_failed'))
+    }
+
     redis = new Redis(process.env.REDIS_URL, {
       maxRetriesPerRequest: 3,
       lazyConnect: true,
