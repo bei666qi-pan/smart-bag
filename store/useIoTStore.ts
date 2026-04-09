@@ -41,16 +41,16 @@ interface IoTState {
   setLastSeenAt: (timestamp: string | null) => void
   markLastSeen: () => void
 
-  battery: number
-  temp: number
-  humid: number
+  battery: number | null
+  temp: number | null
+  humid: number | null
 
   gpsCoords: [number, number] | null
   setGpsCoords: (coords: [number, number]) => void
 
-  setBattery: (value: number) => void
-  setTemp: (value: number) => void
-  setHumid: (value: number) => void
+  setBattery: (value: number | null) => void
+  setTemp: (value: number | null) => void
+  setHumid: (value: number | null) => void
 
   mqttClient: MqttClient | null
   setMqttClient: (client: MqttClient | null) => void
@@ -79,9 +79,9 @@ export const useIoTStore = create<IoTState>()(
   iotApiError: null,
   deviceOnline: false,
   lastSeenAt: null,
-  battery: 85,
-  temp: 24,
-  humid: 45,
+  battery: null,
+  temp: null,
+  humid: null,
   gpsCoords: null,
   mqttClient: null,
   pendingCmd: null,

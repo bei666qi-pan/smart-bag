@@ -58,6 +58,9 @@ export function VisionSection() {
       if (isHttpsPage && parsed.protocol === 'http:') {
         return { ok: false, reason: '当前页面为 HTTPS，HTTP 视频流会触发混合内容拦截，请使用 HTTPS 或走广域网快照模式' }
       }
+      if (isProd && parsed.protocol !== 'https:') {
+        return { ok: false, reason: '生产环境要求使用 HTTPS 视频流地址（或改用广域网快照模式）' }
+      }
       if (isProd && isPrivateHostname(parsed.hostname)) {
         return { ok: false, reason: '生产环境不建议使用局域网地址作为视频流，请配置公网可达地址或使用广域网快照模式' }
       }
@@ -136,6 +139,7 @@ export function VisionSection() {
   }
 
   const streamUrl = isWan ? imageUrl : lanStreamUrl
+  const canAnalyze = isWan ? Boolean(imageUrl) : Boolean(lanStreamUrl)
 
   return (
     <>
@@ -253,7 +257,7 @@ export function VisionSection() {
                 </div>
                 <div className="absolute bottom-3 right-3 z-10">
                   <Badge variant="secondary" className="text-xs font-mono">
-                    1920x1080 @ 30fps
+                    {streamUrl ? '参数：待接入' : '未接入视频流'}
                   </Badge>
                 </div>
 
@@ -262,7 +266,7 @@ export function VisionSection() {
                   <Button
                     size="sm"
                     onClick={handleAnalyze}
-                    disabled={isPending}
+                    disabled={isPending || !canAnalyze}
                     className="gap-2"
                   >
                     {isPending ? (

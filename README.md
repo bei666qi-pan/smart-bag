@@ -2,6 +2,15 @@
 
 IoT 数字孪生仪表盘 — 实时传感器监测、视觉识别、位置追踪、交互中枢。
 
+## 快速入口（联调必看）
+
+- **软硬对接文档（主入口）**：`软硬对接文档.md`
+- **架构**：`docs/ARCHITECTURE.md`
+- **IoT 集成测试**：`docs/IOT_TESTING_GUIDE.md`
+- **服务端守护进程状态（只读诊断）**：`/api/iot/daemon-status`
+
+> 重要：**Broker 在线 ≠ 设备在线**。设备在线以 `v5/bag/status` 为准；页面刷新后的初始状态依赖 Redis/API。
+
 ## 技术栈
 
 - **框架**: Next.js 16 (App Router) + React 19
@@ -19,6 +28,11 @@ pnpm dev
 ```
 
 配置 `.env.local`（参考 `AGENTS.md` 中的环境变量说明）。
+
+### 生产环境 MQTT 地址（标准写法）
+
+- **硬件 MQTT（TCP）**：`mqtt.bag.versecraft.cn:1883`
+- **浏览器 MQTT（WSS）**：`wss://mqtt.bag.versecraft.cn/mqtt`
 
 ## 🐳 Docker Deployment
 
@@ -92,4 +106,4 @@ docker compose exec mqtt mosquitto_pub -t "v5/bag/gps" -m '{"lat":31.2304,"lng":
 
 ## 项目文档
 
-详细架构文档见 `docs/ARCHITECTURE.md`，IoT 测试指南见 `docs/IOT_TESTING_GUIDE.md`。
+详细架构文档见 `docs/ARCHITECTURE.md`，IoT 测试指南见 `docs/IOT_TESTING_GUIDE.md`，软硬对接主文档见 `软硬对接文档.md`。

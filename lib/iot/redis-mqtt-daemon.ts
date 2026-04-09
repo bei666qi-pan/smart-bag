@@ -4,6 +4,18 @@ type DaemonStartResult =
   | { started: true }
   | { started: false; reason: 'not_nodejs_runtime' | 'redis_unconfigured' | 'mqtt_unconfigured' | 'import_failed' }
 
+export type IoTDaemonStatus = {
+  started: boolean
+  starting: boolean
+  redisUrlConfigured: boolean
+  mqttServerUrlConfigured: boolean
+  redisConnected: boolean
+  mqttConnected: boolean
+  subscribed: boolean
+  lastMirrorAt: string | null
+  lastError: string | null
+}
+
 function redactUrl(input: string) {
   try {
     const url = new URL(input)
@@ -16,28 +28,60 @@ function redactUrl(input: string) {
 
 export async function startRedisBackedMqttDaemon(): Promise<DaemonStartResult> {
   const g = globalThis as unknown as {
-    __smartBagIotDaemon?: { started: boolean; starting?: Promise<DaemonStartResult> }
+    __smartBagIotDaemon?: { started: boolean; starting?: Promise<DaemonStartResult>; status?: IoTDaemonStatus }
+  }
+
+  g.__smartBagIotDaemon ??= {
+    started: false,
+    status: {
+      started: false,
+      starting: false,
+      redisUrlConfigured: Boolean(process.env.REDIS_URL),
+      mqttServerUrlConfigured: Boolean(process.env.MQTT_SERVER_URL),
+      redisConnected: false,
+      mqttConnected: false,
+      subscribed: false,
+      lastMirrorAt: null,
+      lastError: null,
+    },
   }
 
   if (g.__smartBagIotDaemon?.started) return { started: true }
   if (g.__smartBagIotDaemon?.starting) return g.__smartBagIotDaemon.starting
 
   const starting = (async (): Promise<DaemonStartResult> => {
+    if (g.__smartBagIotDaemon?.status) {
+      g.__smartBagIotDaemon.status.starting = true
+      g.__smartBagIotDaemon.status.redisUrlConfigured = Boolean(process.env.REDIS_URL)
+      g.__smartBagIotDaemon.status.mqttServerUrlConfigured = Boolean(process.env.MQTT_SERVER_URL)
+    }
     // Next sets NEXT_RUNTIME in some contexts; do not assume it is always present.
     if (process.env.NEXT_RUNTIME === 'edge') {
       console.warn('[IoT Daemon] Edge runtime detected, skipping daemon start')
+      if (g.__smartBagIotDaemon?.status) {
+        g.__smartBagIotDaemon.status.lastError = 'edge_runtime'
+        g.__smartBagIotDaemon.status.starting = false
+      }
       return { started: false, reason: 'not_nodejs_runtime' }
     }
 
     const redisUrl = process.env.REDIS_URL
     if (!redisUrl) {
       console.warn('[IoT Daemon] REDIS_URL 未配置，跳过 Redis 持久化')
+      if (g.__smartBagIotDaemon?.status) {
+        g.__smartBagIotDaemon.status.lastError = 'redis_unconfigured'
+        g.__smartBagIotDaemon.status.starting = false
+      }
       return { started: false, reason: 'redis_unconfigured' }
     }
 
     const mqttUrl = process.env.MQTT_SERVER_URL
     if (!mqttUrl) {
       console.warn('[IoT Daemon] MQTT_SERVER_URL 未配置，跳过 MQTT->Redis 持久化')
+      if (g.__smartBagIotDaemon?.status) {
+        g.__smartBagIotDaemon.status.lastError = 'mqtt_unconfigured'
+        g.__smartBagIotDaemon.status.starting = false
+      }
       return { started: false, reason: 'mqtt_unconfigured' }
     }
 
@@ -45,8 +89,17 @@ export async function startRedisBackedMqttDaemon(): Promise<DaemonStartResult> {
       const [{ default: Redis }, mqtt] = await Promise.all([import('ioredis'), import('mqtt')])
 
       const redis = new Redis(redisUrl, { maxRetriesPerRequest: 3, lazyConnect: true })
-      redis.on('connect', () => console.log('[IoT Daemon] Redis connected:', redactUrl(redisUrl)))
-      redis.on('error', (err) => console.error('[IoT Daemon] Redis error:', err))
+      redis.on('connect', () => {
+        if (g.__smartBagIotDaemon?.status) g.__smartBagIotDaemon.status.redisConnected = true
+        console.log('[IoT Daemon] Redis connected:', redactUrl(redisUrl))
+      })
+      redis.on('error', (err) => {
+        if (g.__smartBagIotDaemon?.status) {
+          g.__smartBagIotDaemon.status.redisConnected = false
+          g.__smartBagIotDaemon.status.lastError = `redis_error:${String((err as any)?.message ?? err)}`
+        }
+        console.error('[IoT Daemon] Redis error:', err)
+      })
 
       const client = mqtt.connect(mqttUrl, {
         clientId: `server_daemon_${Math.random().toString(16).slice(2, 10)}`,
@@ -56,14 +109,27 @@ export async function startRedisBackedMqttDaemon(): Promise<DaemonStartResult> {
       })
 
       client.on('connect', () => {
+        if (g.__smartBagIotDaemon?.status) g.__smartBagIotDaemon.status.mqttConnected = true
         console.log('[IoT Daemon] MQTT connected:', redactUrl(mqttUrl))
         client.subscribe('v5/bag/#', (err) => {
-          if (err) console.error('[IoT Daemon] MQTT subscribe failed:', err.message)
-          else console.log('[IoT Daemon] Subscribed: v5/bag/#')
+          if (err) {
+            if (g.__smartBagIotDaemon?.status) {
+              g.__smartBagIotDaemon.status.subscribed = false
+              g.__smartBagIotDaemon.status.lastError = `mqtt_subscribe_failed:${err.message}`
+            }
+            console.error('[IoT Daemon] MQTT subscribe failed:', err.message)
+          } else {
+            if (g.__smartBagIotDaemon?.status) g.__smartBagIotDaemon.status.subscribed = true
+            console.log('[IoT Daemon] Subscribed: v5/bag/#')
+          }
         })
       })
 
       client.on('error', (err) => {
+        if (g.__smartBagIotDaemon?.status) {
+          g.__smartBagIotDaemon.status.mqttConnected = false
+          g.__smartBagIotDaemon.status.lastError = `mqtt_error:${err.message}`
+        }
         console.error('[IoT Daemon] MQTT error:', err.message)
       })
 
@@ -99,22 +165,57 @@ export async function startRedisBackedMqttDaemon(): Promise<DaemonStartResult> {
               )
             }
           }
+
+          if (g.__smartBagIotDaemon?.status) {
+            g.__smartBagIotDaemon.status.lastMirrorAt = lastSeenAt
+          }
         } catch (error) {
+          if (g.__smartBagIotDaemon?.status) {
+            g.__smartBagIotDaemon.status.lastError = `process_error:${String((error as any)?.message ?? error)}`
+          }
           console.error('[IoT Daemon] Failed to process MQTT message:', error)
         }
       })
 
       console.log('[IoT Daemon] Started (async connect in progress)')
+      if (g.__smartBagIotDaemon?.status) {
+        g.__smartBagIotDaemon.status.started = true
+        g.__smartBagIotDaemon.status.starting = false
+      }
       return { started: true }
     } catch (error) {
       console.error('[IoT Daemon] Import/start failed:', error)
+      if (g.__smartBagIotDaemon?.status) {
+        g.__smartBagIotDaemon.status.lastError = `import_failed:${String((error as any)?.message ?? error)}`
+        g.__smartBagIotDaemon.status.starting = false
+      }
       return { started: false, reason: 'import_failed' }
     }
   })()
 
   g.__smartBagIotDaemon = { started: false, starting }
   const result = await starting
-  g.__smartBagIotDaemon = { started: result.started }
+  g.__smartBagIotDaemon = { started: result.started, status: g.__smartBagIotDaemon?.status }
   return result
 
+}
+
+export function getIoTDaemonStatus(): IoTDaemonStatus {
+  const g = globalThis as unknown as {
+    __smartBagIotDaemon?: { started: boolean; starting?: Promise<DaemonStartResult>; status?: IoTDaemonStatus }
+  }
+
+  return (
+    g.__smartBagIotDaemon?.status ?? {
+      started: false,
+      starting: false,
+      redisUrlConfigured: Boolean(process.env.REDIS_URL),
+      mqttServerUrlConfigured: Boolean(process.env.MQTT_SERVER_URL),
+      redisConnected: false,
+      mqttConnected: false,
+      subscribed: false,
+      lastMirrorAt: null,
+      lastError: null,
+    }
+  )
 }

@@ -350,7 +350,8 @@ useEffect(() => {
 
 ```bash
 # MQTT
-NEXT_PUBLIC_MQTT_URL=wss://mqtt.bag.versecraft.cn
+NEXT_PUBLIC_MQTT_URL=wss://mqtt.bag.versecraft.cn/mqtt
+NEXT_PUBLIC_MQTT_PATH=/mqtt
 
 # MQTT (Server daemon, TCP)
 MQTT_SERVER_URL=mqtt://mqtt.bag.versecraft.cn:1883

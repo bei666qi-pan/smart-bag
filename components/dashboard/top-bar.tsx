@@ -128,12 +128,12 @@ export function TopBar() {
 
         <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
           <Thermometer className="h-4 w-4 text-foreground" />
-          <span className="font-mono text-xs">{temp}C</span>
+          <span className="font-mono text-xs">{typeof temp === 'number' ? `${temp}C` : '—'}</span>
         </div>
 
         <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
           <Droplets className="h-4 w-4 text-foreground" />
-          <span className="font-mono text-xs">{humid}%</span>
+          <span className="font-mono text-xs">{typeof humid === 'number' ? `${humid}%` : '—'}</span>
         </div>
 
         <Separator orientation="vertical" className="h-5" />
@@ -142,7 +142,7 @@ export function TopBar() {
           <BatteryMedium className="h-4 w-4 text-foreground" />
           <span className="font-mono text-xs text-muted-foreground">
             {"\u7535\u91cf "}
-            {battery}%
+            {typeof battery === 'number' ? `${battery}%` : '—'}
           </span>
         </div>
       </div>

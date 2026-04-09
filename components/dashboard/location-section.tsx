@@ -123,7 +123,6 @@ export function LocationSection() {
           const resizeInterval = setInterval(() => {
             if (mapRef.current) {
               try {
-                console.log('[AMap] Forcing resize heartbeat...')
                 mapRef.current.resize()
               } catch (resizeError) {
                 console.error('[AMap] Heartbeat resize 失败:', resizeError)
@@ -214,6 +213,34 @@ export function LocationSection() {
       pathPointsRef.current = []
     }
   }, [])
+
+  // Fallback reactive binding: ensure UI + map update when gpsCoords changes,
+  // even if a subscription mechanism is disrupted in some environments.
+  useEffect(() => {
+    if (!mapReady || !mapRef.current || !gpsCoords) return
+
+    const map = mapRef.current
+    const converted = convertWgs84ToGcj02Coords(gpsCoords)
+    if (!converted || converted.length !== 2) return
+
+    const AMapGlobal = (window as any).AMap
+    if (!AMapGlobal) return
+
+    try {
+      const lngLat = new AMapGlobal.LngLat(converted[0], converted[1])
+
+      if (!markerRef.current) {
+        markerRef.current = new AMapGlobal.Marker({ position: lngLat, title: '智能书包' })
+        map.add(markerRef.current)
+      } else {
+        markerRef.current.setPosition(lngLat)
+      }
+
+      map.setCenter(lngLat)
+    } catch (e) {
+      // Avoid noisy logs; detailed errors are already handled in the subscribe path.
+    }
+  }, [gpsCoords, mapReady])
 
   // 使用 ResizeObserver 监听容器物理尺寸，驱动 AMap resize，避免 Tailwind/布局变更导致的灰屏
   useEffect(() => {

@@ -5,7 +5,7 @@
 ### 线上/现网 MQTT 地址说明
 
 - **硬件 MQTT (TCP)**: `mqtt.bag.versecraft.cn:1883`
-- **前端 MQTT (WebSocket)**: `wss://mqtt.bag.versecraft.cn`（如有路径以服务端实际配置为准）
+- **前端 MQTT (WebSocket)**: `wss://mqtt.bag.versecraft.cn/mqtt`（生产环境标准写法）
 
 ### 安装 Mosquitto (本地测试)
 

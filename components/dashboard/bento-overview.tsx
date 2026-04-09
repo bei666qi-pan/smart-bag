@@ -102,7 +102,9 @@ export function BentoOverview() {
               </div>
               <div className="flex flex-col">
                 <span className="text-xs text-muted-foreground">电池</span>
-                <span className="text-sm font-semibold text-foreground">{battery}%</span>
+                <span className="text-sm font-semibold text-foreground">
+                  {typeof battery === 'number' ? `${battery}%` : '—'}
+                </span>
               </div>
             </CardContent>
           </Card>
@@ -114,7 +116,9 @@ export function BentoOverview() {
               </div>
               <div className="flex flex-col">
                 <span className="text-xs text-muted-foreground">温度</span>
-                <span className="text-sm font-semibold text-foreground">{temp}°C</span>
+                <span className="text-sm font-semibold text-foreground">
+                  {typeof temp === 'number' ? `${temp}°C` : '—'}
+                </span>
               </div>
             </CardContent>
           </Card>
@@ -126,7 +130,9 @@ export function BentoOverview() {
               </div>
               <div className="flex flex-col">
                 <span className="text-xs text-muted-foreground">湿度</span>
-                <span className="text-sm font-semibold text-foreground">{humid}%</span>
+                <span className="text-sm font-semibold text-foreground">
+                  {typeof humid === 'number' ? `${humid}%` : '—'}
+                </span>
               </div>
             </CardContent>
           </Card>
@@ -163,15 +169,15 @@ export function BentoOverview() {
                   <div className="flex flex-col gap-2">
                     <div className="flex items-center justify-between text-xs">
                       <span className="text-muted-foreground">流</span>
-                      <span className="font-medium text-foreground">局域网模式</span>
+                      <span className="font-medium text-foreground">待接入</span>
                     </div>
                     <div className="flex items-center justify-between text-xs">
-                      <span className="text-muted-foreground">人工智能检测</span>
-                      <span className="font-medium text-foreground">3 个物品</span>
+                      <span className="text-muted-foreground">人工智能分析</span>
+                      <span className="font-medium text-foreground">演示</span>
                     </div>
                     <div className="flex items-center justify-between text-xs">
                       <span className="text-muted-foreground">延迟</span>
-                      <span className="font-mono text-foreground">23ms</span>
+                      <span className="font-mono text-foreground">—</span>
                     </div>
                   </div>
                 </div>
