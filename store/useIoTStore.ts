@@ -1,5 +1,4 @@
 import { create } from 'zustand'
-import { subscribeWithSelector } from 'zustand/middleware'
 import type { MqttClient } from 'mqtt'
 
 export type MqttConnectionStatus =
@@ -72,140 +71,143 @@ function logStateTransition(label: string, previous: unknown, next: unknown) {
   }
 }
 
-export const useIoTStore = create<IoTState>()(
-  subscribeWithSelector((set) => ({
-  mqttConnectionStatus: 'disconnected',
-  iotApiFetchStatus: 'idle',
-  iotApiError: null,
-  deviceOnline: false,
-  lastSeenAt: null,
-  battery: null,
-  temp: null,
-  humid: null,
-  gpsCoords: null,
-  mqttClient: null,
-  pendingCmd: null,
-  lastCmdAck: null,
-  cmdError: null,
+export const useIoTStore = create<IoTState>()((set) => ({
+    mqttConnectionStatus: 'disconnected',
+    iotApiFetchStatus: 'idle',
+    iotApiError: null,
+    deviceOnline: false,
+    lastSeenAt: null,
+    battery: null,
+    temp: null,
+    humid: null,
+    gpsCoords: null,
+    mqttClient: null,
+    pendingCmd: null,
+    lastCmdAck: null,
+    cmdError: null,
 
-  setMqttConnectionStatus: (status) =>
-    set((state) => {
-      logStateTransition('MQTT connection status', state.mqttConnectionStatus, status)
-      return { mqttConnectionStatus: status }
-    }),
+    setMqttConnectionStatus: (status) =>
+      set((state) => {
+        logStateTransition('MQTT connection status', state.mqttConnectionStatus, status)
+        return { mqttConnectionStatus: status }
+      }),
 
-  setIoTApiFetchStatus: (status, error = null) =>
-    set((state) => {
-      logStateTransition('IoT API fetch status', state.iotApiFetchStatus, status)
-      return { iotApiFetchStatus: status, iotApiError: error }
-    }),
+    setIoTApiFetchStatus: (status, error = null) =>
+      set((state) => {
+        logStateTransition('IoT API fetch status', state.iotApiFetchStatus, status)
+        return { iotApiFetchStatus: status, iotApiError: error }
+      }),
 
-  setDeviceOnline: (online) =>
-    set((state) => {
-      logStateTransition('Device online', state.deviceOnline, online)
-      return { deviceOnline: online }
-    }),
+    setDeviceOnline: (online) =>
+      set((state) => {
+        logStateTransition('Device online', state.deviceOnline, online)
+        return { deviceOnline: online }
+      }),
 
-  setLastSeenAt: (timestamp) =>
-    set((state) => {
-      logStateTransition('Last seen at', state.lastSeenAt, timestamp)
-      return { lastSeenAt: timestamp }
-    }),
+    setLastSeenAt: (timestamp) =>
+      set((state) => {
+        logStateTransition('Last seen at', state.lastSeenAt, timestamp)
+        return { lastSeenAt: timestamp }
+      }),
 
-  markLastSeen: () =>
-    set((state) => {
-      const timestamp = new Date().toISOString()
-      logStateTransition('Last seen at', state.lastSeenAt, timestamp)
-      return { lastSeenAt: timestamp }
-    }),
+    markLastSeen: () =>
+      set((state) => {
+        const timestamp = new Date().toISOString()
+        logStateTransition('Last seen at', state.lastSeenAt, timestamp)
+        return { lastSeenAt: timestamp }
+      }),
 
-  setBattery: (value) => set({ battery: value }),
-  setTemp: (value) => set({ temp: value }),
-  setHumid: (value) => set({ humid: value }),
-  setGpsCoords: (coords) => set({ gpsCoords: coords }),
+    setBattery: (value) => set({ battery: value }),
+    setTemp: (value) => set({ temp: value }),
+    setHumid: (value) => set({ humid: value }),
+    setGpsCoords: (coords) => set({ gpsCoords: coords }),
 
-  setMqttClient: (client) => set({ mqttClient: client }),
+    setMqttClient: (client) => set({ mqttClient: client }),
 
-  setPendingCmd: (cmd) => set({ pendingCmd: cmd }),
-  setLastCmdAck: (ack) => set({ lastCmdAck: ack }),
-  setCmdError: (error) => set({ cmdError: error }),
+    setPendingCmd: (cmd) => set({ pendingCmd: cmd }),
+    setLastCmdAck: (ack) => set({ lastCmdAck: ack }),
+    setCmdError: (error) => set({ cmdError: error }),
 
-  publishCommand: (action, value) => {
-    const state = useIoTStore.getState()
-    const client = state.mqttClient
+    publishCommand: (action, value) => {
+      const state = useIoTStore.getState()
+      const client = state.mqttClient
 
-    if (!client) {
-      return { ok: false, error: 'MQTT 客户端未初始化' }
-    }
-    if (state.mqttConnectionStatus !== 'connected') {
-      return { ok: false, error: 'MQTT 未连接，无法下发命令' }
-    }
+      if (!client) {
+        return { ok: false, error: 'MQTT 客户端尚未初始化' }
+      }
 
-    const cmd_id =
-      typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
-        ? crypto.randomUUID()
-        : `cmd_${Date.now()}_${Math.random().toString(16).slice(2, 6)}`
-    const sentAt = new Date().toISOString()
-    // Protocol: hardware expects { id, action, value }
-    // ACK: { cmd_id, status, msg }
-    const body = JSON.stringify({ id: cmd_id, action, value })
+      if (state.mqttConnectionStatus !== 'connected') {
+        return { ok: false, error: 'MQTT 未连接，无法下发命令' }
+      }
 
-    try {
-      state.setCmdError(null)
-      state.setPendingCmd({ cmd_id, type: action, value, sentAt })
+      const cmd_id =
+        typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+          ? crypto.randomUUID()
+          : `cmd_${Date.now()}_${Math.random().toString(16).slice(2, 6)}`
+      const sentAt = new Date().toISOString()
+      const body = JSON.stringify({ id: cmd_id, action, value })
 
-      client.publish('v5/bag/cmd', body, { qos: 1 }, (err) => {
-        if (err) {
-          console.error('[MQTT] Publish command failed:', err)
-          useIoTStore.getState().setCmdError(err.message)
-        } else {
+      try {
+        state.setCmdError(null)
+        state.setPendingCmd({ cmd_id, type: action, value, sentAt })
+
+        client.publish('v5/bag/cmd', body, { qos: 1 }, (error) => {
+          if (error) {
+            console.error('[MQTT] Publish command failed:', error)
+            const currentState = useIoTStore.getState()
+            currentState.setPendingCmd(null)
+            currentState.setCmdError(error.message)
+            return
+          }
+
           console.log('[MQTT] Command published:', { cmd_id, action, value })
+        })
+
+        return { ok: true, cmd_id }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'unknown_error'
+        state.setCmdError(message)
+        state.setPendingCmd(null)
+        return { ok: false, error: message }
+      }
+    },
+
+    fetchInitialState: async () => {
+      useIoTStore.getState().setIoTApiFetchStatus('loading')
+      try {
+        const res = await fetch('/api/iot/status', { cache: 'no-store' })
+        if (!res.ok) {
+          console.warn('[Store] Initial IoT state request failed:', res.status)
+          useIoTStore.getState().setIoTApiFetchStatus('error', `http_${res.status}`)
+          return
         }
-      })
 
-      return { ok: true, cmd_id }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : '未知错误'
-      state.setCmdError(message)
-      return { ok: false, error: message }
-    }
-  },
+        const data = await res.json()
+        console.log('[Store] Initial IoT state:', data)
+        useIoTStore.getState().setIoTApiFetchStatus('success', null)
 
-  fetchInitialState: async () => {
-    useIoTStore.getState().setIoTApiFetchStatus('loading')
-    try {
-      const res = await fetch('/api/iot/status', { cache: 'no-store' })
-      if (!res.ok) {
-        console.warn('[Store] Initial IoT state request failed:', res.status)
-        useIoTStore.getState().setIoTApiFetchStatus('error', `http_${res.status}`)
-        return
+        const patch: Partial<IoTState> = {
+          battery: typeof data.battery === 'number' ? data.battery : null,
+          temp: typeof data.temp === 'number' ? data.temp : null,
+          humid: typeof data.humid === 'number' ? data.humid : null,
+          gpsCoords:
+            typeof data.lat === 'number' && typeof data.lng === 'number'
+              ? [data.lng, data.lat]
+              : null,
+        }
+        // NOTE: deviceOnline is strictly derived from v5/bag/status on the client side.
+        // API initial state should not override deviceOnline to avoid mixing semantics.
+
+        if (typeof data.lastSeenAt === 'string' || data.lastSeenAt === null) {
+          patch.lastSeenAt = data.lastSeenAt
+        }
+
+        set(patch)
+      } catch (error) {
+        console.warn('[Store] Failed to fetch initial IoT state:', error)
+        useIoTStore
+          .getState()
+          .setIoTApiFetchStatus('error', error instanceof Error ? error.message : 'unknown_error')
       }
-
-      const data = await res.json()
-      console.log('[Store] Initial IoT state:', data)
-      useIoTStore.getState().setIoTApiFetchStatus('success', null)
-
-      const patch: Partial<IoTState> = {}
-      // NOTE: deviceOnline is strictly derived from v5/bag/status on the client side.
-      // API initial state should not override deviceOnline to avoid mixing semantics.
-
-      if (typeof data.battery === 'number') patch.battery = data.battery
-      if (typeof data.temp === 'number') patch.temp = data.temp
-      if (typeof data.humid === 'number') patch.humid = data.humid
-      if (typeof data.lat === 'number' && typeof data.lng === 'number') {
-        patch.gpsCoords = [data.lng, data.lat]
-      }
-      if (typeof data.lastSeenAt === 'string' || data.lastSeenAt === null) {
-        patch.lastSeenAt = data.lastSeenAt
-      }
-
-      set(patch)
-    } catch (error) {
-      console.warn('[Store] Failed to fetch initial IoT state:', error)
-      useIoTStore
-        .getState()
-        .setIoTApiFetchStatus('error', error instanceof Error ? error.message : 'unknown_error')
-    }
-  },
+    },
 }))
-)

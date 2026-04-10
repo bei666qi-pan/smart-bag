@@ -1,9 +1,6 @@
-// components/dashboard/bento-overview.tsx
 "use client"
 
 import Link from "next/link"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
 import {
   Eye,
   MapPin,
@@ -13,11 +10,32 @@ import {
   Droplets,
   Wifi,
   Backpack,
-  BookOpen,
-  ShieldCheck,
   Activity,
+  Radio,
+  CheckCircle2,
+  AlertCircle,
 } from "lucide-react"
+import { Badge } from "@/components/ui/badge"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { useIoTStore } from "@/store/useIoTStore"
+
+function formatMetric(value: number | null, suffix: string) {
+  return typeof value === "number" ? `${value}${suffix}` : "—"
+}
+
+function formatCoords(coords: [number, number] | null) {
+  if (!coords) return "暂无数据"
+  return `${coords[1].toFixed(6)}°N, ${coords[0].toFixed(6)}°E`
+}
+
+function formatTimestamp(timestamp: string | null) {
+  if (!timestamp) return "—"
+
+  const date = new Date(timestamp)
+  if (Number.isNaN(date.getTime())) return timestamp
+
+  return date.toLocaleString("zh-CN")
+}
 
 export function BentoOverview() {
   const mqttConnectionStatus = useIoTStore((state) => state.mqttConnectionStatus)
@@ -26,6 +44,10 @@ export function BentoOverview() {
   const battery = useIoTStore((state) => state.battery)
   const temp = useIoTStore((state) => state.temp)
   const humid = useIoTStore((state) => state.humid)
+  const gpsCoords = useIoTStore((state) => state.gpsCoords)
+  const lastSeenAt = useIoTStore((state) => state.lastSeenAt)
+  const pendingCmd = useIoTStore((state) => state.pendingCmd)
+  const lastCmdAck = useIoTStore((state) => state.lastCmdAck)
 
   const mqttLabel: Record<typeof mqttConnectionStatus, string> = {
     connected: "已连接",
@@ -34,279 +56,291 @@ export function BentoOverview() {
     error: "异常",
   }
 
+  const ackLabel = lastCmdAck
+    ? `${lastCmdAck.status === 0 ? "成功" : "失败"} ${lastCmdAck.cmd_id}`
+    : "暂无 ACK"
+
   return (
-    <>
-      {/* <!-- SECTION:BENTO_OVERVIEW --> */}
-      <div className="flex flex-col gap-6">
-        {/* Welcome */}
-        <div className="flex flex-col gap-1">
-          <h1 className="text-2xl font-semibold tracking-tight text-foreground text-balance">
-            智能书包 V5.0
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            数字孪生仪表盘 - 实时监测和智能分析
-          </p>
-        </div>
+    <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-1">
+        <h1 className="text-2xl font-semibold tracking-tight text-foreground text-balance">
+          智能书包 V5.0
+        </h1>
+        <p className="text-sm text-muted-foreground">
+          数字孪生仪表盘，当前只展示已接入的实时状态与真实空态。
+        </p>
+      </div>
 
-        {/* Status Cards Row */}
-        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-          <Card className="border-border bg-card">
-            <CardContent className="flex items-center gap-3 pt-6">
-              <div
-                className={`flex h-10 w-10 items-center justify-center rounded-xl ${
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
+        <Card className="border-border bg-card">
+          <CardContent className="flex items-center gap-3 pt-6">
+            <div
+              className={`flex h-10 w-10 items-center justify-center rounded-xl ${
+                mqttConnectionStatus === "connected"
+                  ? "bg-emerald-50"
+                  : mqttConnectionStatus === "connecting"
+                    ? "bg-amber-50"
+                    : mqttConnectionStatus === "error"
+                      ? "bg-rose-50"
+                      : "bg-gray-50"
+              }`}
+            >
+              <Wifi
+                className={`h-5 w-5 ${
                   mqttConnectionStatus === "connected"
-                    ? "bg-emerald-50"
+                    ? "text-emerald-600"
                     : mqttConnectionStatus === "connecting"
-                      ? "bg-amber-50"
+                      ? "text-amber-600"
                       : mqttConnectionStatus === "error"
-                        ? "bg-rose-50"
-                        : "bg-gray-50"
+                        ? "text-rose-600"
+                        : "text-gray-600"
                 }`}
-              >
-                <Wifi
-                  className={`h-5 w-5 ${
-                    mqttConnectionStatus === "connected"
-                      ? "text-emerald-600"
-                      : mqttConnectionStatus === "connecting"
-                        ? "text-amber-600"
-                        : mqttConnectionStatus === "error"
-                          ? "text-rose-600"
-                          : "text-gray-600"
-                  }`}
-                />
-              </div>
-              <div className="flex flex-col">
-                <span className="text-xs text-muted-foreground">MQTT（Broker）</span>
-                <span className="text-sm font-semibold text-foreground">{mqttLabel[mqttConnectionStatus]}</span>
-              </div>
-            </CardContent>
-          </Card>
+              />
+            </div>
+            <div className="flex flex-col">
+              <span className="text-xs text-muted-foreground">MQTT Broker</span>
+              <span className="text-sm font-semibold text-foreground">
+                {mqttLabel[mqttConnectionStatus]}
+              </span>
+            </div>
+          </CardContent>
+        </Card>
 
-          <Card className="border-border bg-card">
-            <CardContent className="flex items-center gap-3 pt-6">
-              <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${deviceOnline ? "bg-sky-50" : "bg-gray-50"}`}>
-                <Backpack className={`h-5 w-5 ${deviceOnline ? "text-sky-600" : "text-gray-600"}`} />
-              </div>
-              <div className="flex flex-col">
-                <span className="text-xs text-muted-foreground">设备</span>
-                <span className="text-sm font-semibold text-foreground">{deviceOnline ? "在线" : "离线"}</span>
-                <span className="mt-0.5 text-[10px] text-muted-foreground">来自 v5/bag/status</span>
-              </div>
-            </CardContent>
-          </Card>
+        <Card className="border-border bg-card">
+          <CardContent className="flex items-center gap-3 pt-6">
+            <div
+              className={`flex h-10 w-10 items-center justify-center rounded-xl ${
+                deviceOnline ? "bg-sky-50" : "bg-gray-50"
+              }`}
+            >
+              <Backpack
+                className={`h-5 w-5 ${deviceOnline ? "text-sky-600" : "text-gray-600"}`}
+              />
+            </div>
+            <div className="flex flex-col">
+              <span className="text-xs text-muted-foreground">设备</span>
+              <span className="text-sm font-semibold text-foreground">
+                {deviceOnline ? "在线" : "离线"}
+              </span>
+              <span className="mt-0.5 text-[10px] text-muted-foreground">
+                来自 v5/bag/status
+              </span>
+            </div>
+          </CardContent>
+        </Card>
 
-          <Card className="border-border bg-card">
-            <CardContent className="flex items-center gap-3 pt-6">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50">
-                <BatteryMedium className="h-5 w-5 text-blue-600" />
-              </div>
-              <div className="flex flex-col">
-                <span className="text-xs text-muted-foreground">电池</span>
-                <span className="text-sm font-semibold text-foreground">
-                  {typeof battery === 'number' ? `${battery}%` : '—'}
-                </span>
-              </div>
-            </CardContent>
-          </Card>
+        <Card className="border-border bg-card">
+          <CardContent className="flex items-center gap-3 pt-6">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50">
+              <BatteryMedium className="h-5 w-5 text-blue-600" />
+            </div>
+            <div className="flex flex-col">
+              <span className="text-xs text-muted-foreground">电量</span>
+              <span className="text-sm font-semibold text-foreground">
+                {formatMetric(battery, "%")}
+              </span>
+            </div>
+          </CardContent>
+        </Card>
 
-          <Card className="border-border bg-card">
-            <CardContent className="flex items-center gap-3 pt-6">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-50">
-                <Thermometer className="h-5 w-5 text-amber-600" />
-              </div>
-              <div className="flex flex-col">
-                <span className="text-xs text-muted-foreground">温度</span>
-                <span className="text-sm font-semibold text-foreground">
-                  {typeof temp === 'number' ? `${temp}°C` : '—'}
-                </span>
-              </div>
-            </CardContent>
-          </Card>
+        <Card className="border-border bg-card">
+          <CardContent className="flex items-center gap-3 pt-6">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-50">
+              <Thermometer className="h-5 w-5 text-amber-600" />
+            </div>
+            <div className="flex flex-col">
+              <span className="text-xs text-muted-foreground">温度</span>
+              <span className="text-sm font-semibold text-foreground">
+                {formatMetric(temp, "°C")}
+              </span>
+            </div>
+          </CardContent>
+        </Card>
 
-          <Card className="border-border bg-card">
-            <CardContent className="flex items-center gap-3 pt-6">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-sky-50">
-                <Droplets className="h-5 w-5 text-sky-600" />
-              </div>
-              <div className="flex flex-col">
-                <span className="text-xs text-muted-foreground">湿度</span>
-                <span className="text-sm font-semibold text-foreground">
-                  {typeof humid === 'number' ? `${humid}%` : '—'}
-                </span>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+        <Card className="border-border bg-card">
+          <CardContent className="flex items-center gap-3 pt-6">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-sky-50">
+              <Droplets className="h-5 w-5 text-sky-600" />
+            </div>
+            <div className="flex flex-col">
+              <span className="text-xs text-muted-foreground">湿度</span>
+              <span className="text-sm font-semibold text-foreground">
+                {formatMetric(humid, "%")}
+              </span>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
 
-        <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-          <Badge variant="secondary" className="text-[10px]">
-            API 初始化：{iotApiFetchStatus}
-          </Badge>
-          <span className="text-[10px]">提示：Broker 已连接 ≠ 设备在线</span>
-        </div>
+      <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+        <Badge variant="secondary" className="text-[10px]">
+          API 初始化：{iotApiFetchStatus}
+        </Badge>
+        <Badge variant="outline" className="text-[10px]">
+          最近上报：{formatTimestamp(lastSeenAt)}
+        </Badge>
+        <span className="text-[10px]">提示：Broker 已连接 ≠ 设备在线</span>
+      </div>
 
-        {/* Bento Grid */}
-        <div className="grid gap-4 lg:grid-cols-3">
-          {/* Vision Card */}
-          <Link href="/vision" className="group lg:row-span-2">
-            <Card className="h-full cursor-pointer border-border bg-card transition-shadow hover:shadow-md">
-              <CardHeader className="pb-3">
-                <CardTitle className="flex items-center justify-between text-sm font-medium text-foreground">
-                  <span className="flex items-center gap-2">
-                    <Eye className="h-4 w-4" />
-                    视觉
-                  </span>
-                  <Badge variant="secondary" className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px]">
-                    活跃
-                  </Badge>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="flex flex-col gap-4">
-                  <div className="aspect-video w-full rounded-lg bg-muted flex items-center justify-center">
-                    <Eye className="h-8 w-8 text-muted-foreground/50" />
-                  </div>
-                  <div className="flex flex-col gap-2">
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="text-muted-foreground">流</span>
-                      <span className="font-medium text-foreground">待接入</span>
-                    </div>
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="text-muted-foreground">人工智能分析</span>
-                      <span className="font-medium text-foreground">演示</span>
-                    </div>
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="text-muted-foreground">延迟</span>
-                      <span className="font-mono text-foreground">—</span>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </Link>
-
-          {/* Location Card */}
-          <Link href="/location" className="group">
-            <Card className="h-full cursor-pointer border-border bg-card transition-shadow hover:shadow-md">
-              <CardHeader className="pb-3">
-                <CardTitle className="flex items-center justify-between text-sm font-medium text-foreground">
-                  <span className="flex items-center gap-2">
-                    <MapPin className="h-4 w-4" />
-                    位置
-                  </span>
-                  <Badge variant="secondary" className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px]">
-                    安全区
-                  </Badge>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="flex flex-col gap-2">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-muted-foreground">当前</span>
-                    <span className="font-medium text-foreground">教室 3-B</span>
-                  </div>
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-muted-foreground">速度</span>
-                    <span className="font-mono text-foreground">0 km/h</span>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </Link>
-
-          {/* Interaction Card */}
-          <Link href="/interaction" className="group">
-            <Card className="h-full cursor-pointer border-border bg-card transition-shadow hover:shadow-md">
-              <CardHeader className="pb-3">
-                <CardTitle className="flex items-center justify-between text-sm font-medium text-foreground">
-                  <span className="flex items-center gap-2">
-                    <MessageCircle className="h-4 w-4" />
-                    交互
-                  </span>
-                  <Badge variant="secondary" className="text-[10px]">
-                    2 条新消息
-                  </Badge>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="flex flex-col gap-2">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-muted-foreground">最新</span>
-                    <span className="font-medium text-foreground truncate ml-2">好的,收到!</span>
-                  </div>
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-muted-foreground">专注计时</span>
-                    <span className="font-mono text-foreground">25:00</span>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </Link>
-
-          {/* Bag Contents Card */}
-          <Card className="border-border bg-card lg:col-span-2">
+      <div className="grid gap-4 lg:grid-cols-3">
+        <Link href="/vision" className="group lg:row-span-2">
+          <Card className="h-full cursor-pointer border-border bg-card transition-shadow hover:shadow-md">
             <CardHeader className="pb-3">
-              <CardTitle className="flex items-center gap-2 text-sm font-medium text-foreground">
-                <Backpack className="h-4 w-4" />
-                书包内容
+              <CardTitle className="flex items-center justify-between text-sm font-medium text-foreground">
+                <span className="flex items-center gap-2">
+                  <Eye className="h-4 w-4" />
+                  视觉
+                </span>
+                <Badge variant="outline" className="text-[10px]">
+                  按需分析
+                </Badge>
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                {[
-                  { name: "数学教科书", icon: BookOpen, status: "ok" },
-                  { name: "英文书", icon: BookOpen, status: "ok" },
-                  { name: "笔记本", icon: BookOpen, status: "ok" },
-                  { name: "水瓶", icon: Droplets, status: "ok" },
-                ].map((item, i) => {
-                  const Icon = item.icon
-                  return (
-                    <div
-                      key={i}
-                      className="flex items-center gap-2 rounded-lg border border-border bg-muted/30 p-2.5"
-                    >
-                      <Icon className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-xs font-medium text-foreground">{item.name}</span>
-                    </div>
-                  )
-                })}
+              <div className="flex flex-col gap-4">
+                <div className="flex aspect-video w-full items-center justify-center rounded-lg border border-dashed border-border bg-muted/20">
+                  <Eye className="h-8 w-8 text-muted-foreground/50" />
+                </div>
+                <div className="flex flex-col gap-2 text-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">输入源</span>
+                    <span className="font-medium text-foreground">进入视觉页查看</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">AI 结果</span>
+                    <span className="font-medium text-foreground">暂无数据</span>
+                  </div>
+                  <div className="rounded-lg border border-dashed border-border bg-muted/20 p-2 text-muted-foreground">
+                    未展示任何示例分辨率、延迟或分析日志，避免误判为实时链路已打通。
+                  </div>
+                </div>
               </div>
             </CardContent>
           </Card>
-        </div>
+        </Link>
 
-        {/* System Health */}
-        <div className="grid grid-cols-3 gap-4">
-          <Card className="border-border bg-card">
-            <CardContent className="flex items-center gap-3 pt-6">
-              <Activity className="h-4 w-4 text-emerald-500" />
-              <div className="flex flex-col">
-                <span className="text-xs text-muted-foreground">CPU</span>
-                <span className="font-mono text-sm font-semibold text-foreground">12%</span>
+        <Link href="/location" className="group">
+          <Card className="h-full cursor-pointer border-border bg-card transition-shadow hover:shadow-md">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center justify-between text-sm font-medium text-foreground">
+                <span className="flex items-center gap-2">
+                  <MapPin className="h-4 w-4" />
+                  位置
+                </span>
+                <Badge variant={gpsCoords ? "secondary" : "outline"} className="text-[10px]">
+                  {gpsCoords ? "已接入" : "暂无数据"}
+                </Badge>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex flex-col gap-2 text-xs">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-muted-foreground">当前坐标</span>
+                  <span className="max-w-[65%] truncate font-mono text-foreground">
+                    {formatCoords(gpsCoords)}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-muted-foreground">最后上报</span>
+                  <span className="max-w-[65%] truncate font-mono text-foreground">
+                    {formatTimestamp(lastSeenAt)}
+                  </span>
+                </div>
               </div>
             </CardContent>
           </Card>
-          <Card className="border-border bg-card">
-            <CardContent className="flex items-center gap-3 pt-6">
-              <Activity className="h-4 w-4 text-blue-500" />
-              <div className="flex flex-col">
-                <span className="text-xs text-muted-foreground">内存</span>
-                <span className="font-mono text-sm font-semibold text-foreground">256MB</span>
+        </Link>
+
+        <Link href="/interaction" className="group">
+          <Card className="h-full cursor-pointer border-border bg-card transition-shadow hover:shadow-md">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center justify-between text-sm font-medium text-foreground">
+                <span className="flex items-center gap-2">
+                  <MessageCircle className="h-4 w-4" />
+                  交互
+                </span>
+                <Badge
+                  variant={pendingCmd ? "secondary" : "outline"}
+                  className="text-[10px]"
+                >
+                  {pendingCmd ? "等待 ACK" : "无待确认命令"}
+                </Badge>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex flex-col gap-2 text-xs">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-muted-foreground">待确认命令</span>
+                  <span className="max-w-[65%] truncate font-medium text-foreground">
+                    {pendingCmd ? `${pendingCmd.type}: ${pendingCmd.value}` : "暂无"}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-muted-foreground">最近 ACK</span>
+                  <span className="max-w-[65%] truncate font-mono text-foreground">
+                    {ackLabel}
+                  </span>
+                </div>
               </div>
             </CardContent>
           </Card>
-          <Card className="border-border bg-card">
-            <CardContent className="flex items-center gap-3 pt-6">
-              <ShieldCheck className="h-4 w-4 text-emerald-500" />
-              <div className="flex flex-col">
-                <span className="text-xs text-muted-foreground">安全</span>
-                <span className="text-sm font-semibold text-foreground">正常</span>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+        </Link>
+
+        <Card className="border-border bg-card lg:col-span-2">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-sm font-medium text-foreground">
+              <Backpack className="h-4 w-4" />
+              物品识别
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="rounded-lg border border-dashed border-border bg-muted/20 p-4 text-sm text-muted-foreground">
+              当前仓库没有“书包内物品清单”的实时数据源，仪表盘不再默认展示示例物品。
+              需要真实结果时，请进入视觉页触发实际图像分析。
+            </div>
+          </CardContent>
+        </Card>
       </div>
-      {/* <!-- /SECTION:BENTO_OVERVIEW --> */}
-    </>
+
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        <Card className="border-border bg-card">
+          <CardContent className="flex items-center gap-3 pt-6">
+            <Radio className="h-4 w-4 text-emerald-500" />
+            <div className="flex flex-col">
+              <span className="text-xs text-muted-foreground">GPS</span>
+              <span className="text-sm font-semibold text-foreground">
+                {gpsCoords ? "已接收坐标" : "暂无数据"}
+              </span>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-border bg-card">
+          <CardContent className="flex items-center gap-3 pt-6">
+            {lastCmdAck?.status === 0 ? (
+              <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+            ) : lastCmdAck ? (
+              <AlertCircle className="h-4 w-4 text-rose-500" />
+            ) : (
+              <Activity className="h-4 w-4 text-muted-foreground" />
+            )}
+            <div className="flex flex-col">
+              <span className="text-xs text-muted-foreground">命令回执</span>
+              <span className="text-sm font-semibold text-foreground">{ackLabel}</span>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-border bg-card">
+          <CardContent className="flex items-center gap-3 pt-6">
+            <Activity className="h-4 w-4 text-blue-500" />
+            <div className="flex flex-col">
+              <span className="text-xs text-muted-foreground">API 初始状态</span>
+              <span className="text-sm font-semibold text-foreground">{iotApiFetchStatus}</span>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
   )
 }

@@ -1,121 +1,67 @@
-# Smart Schoolbag V5.0 - Digital Twin Dashboard
+# Smart Schoolbag V5.0
 
-IoT 数字孪生仪表盘 — 实时传感器监测、视觉识别、位置追踪、交互中枢。
+单仓库 Next.js 16 智能书包数字孪生面板，包含仪表盘、视觉、定位、交互，以及服务端 MQTT -> Redis 镜像链路。
 
-## 快速入口（联调必看）
-
-- **软硬件对接文档（主入口）**：`软硬件对接文档.md`
-- **架构**：`docs/ARCHITECTURE.md`
-- **IoT 集成测试**：`docs/IOT_TESTING_GUIDE.md`
-- **服务端守护进程状态（只读诊断）**：`/api/iot/daemon-status`
-
-> 重要：**Broker 在线 ≠ 设备在线**。设备在线以 `v5/bag/status` 为准；页面刷新后的初始状态依赖 Redis/API。
-
-## 技术栈
-
-- **框架**: Next.js 16 (App Router) + React 19
-- **状态管理**: Zustand
-- **IoT 通信**: MQTT over WebSocket (mqtt.js)
-- **地图**: 高德地图 JS API v2.0
-- **UI**: shadcn/ui + Tailwind CSS v4 + Radix UI
-- **AI**: NewAPI（OpenAI-compatible，固定模型别名 `bag-image` / `bag-text`）
-
-## 本地开发
+## 快速开始
 
 ```bash
 pnpm install
 pnpm dev
 ```
 
-配置 `.env.local`（参考 `AGENTS.md` 中的环境变量说明）。
-
-### 生产环境 MQTT 地址（标准写法）
-
-- **硬件 MQTT（TCP）**：`mqtt.bag.versecraft.cn:1883`
-- **浏览器 MQTT（WSS）**：`wss://mqtt.bag.versecraft.cn/mqtt`
-
-## 🐳 Docker Deployment
-
-### 环境要求
-
-- Docker >= 20.10
-- Docker Compose >= 2.0
-
-### 快速启动
+常用命令：
 
 ```bash
-# 构建所有服务
-docker compose build
-
-# 启动完整 IoT 技术栈 (后台运行)
-docker compose up -d
+pnpm dev
+pnpm build
+pnpm lint
+pnpm start
 ```
 
-启动后访问:
+## MQTT 地址约定
 
-| 服务 | 端口 | 说明 |
-|------|------|------|
-| Dashboard | 3000 | Next.js IoT 仪表盘 |
-| MQTT (TCP) | 1883 | ESP32 硬件连接 |
-| MQTT (WS) | 8083 | 前端 WebSocket |
-| Redis | 6379 | 缓存服务 (Phase 3) |
+- 硬件 MQTT（TCP）：`mqtt.bag.versecraft.cn:1883`
+- 浏览器 MQTT（WSS）：`wss://bag.versecraft.cn/mqtt`
 
-### 传入环境变量
+不要把浏览器用的 `wss://.../mqtt` 直接交给硬件；硬件必须连接 TCP MQTT 端口。
 
-构建时的 `NEXT_PUBLIC_*` 变量通过 build args 传入:
+## 关键环境变量
 
-```bash
-NEXT_PUBLIC_AMAP_KEY=xxx NEXT_PUBLIC_AMAP_SECURITY_CODE=xxx docker compose build
-```
+参考 [.env.example](C:/Users/21276/OneDrive/Desktop/智能书包/.env.example)：
 
-运行时的服务端变量通过环境变量传入:
+- `NEXT_PUBLIC_MQTT_URL`
+- `NEXT_PUBLIC_MQTT_PATH`
+- `MQTT_SERVER_URL`
+- `REDIS_URL`
+- `NEXT_PUBLIC_AMAP_KEY`
+- `NEXT_PUBLIC_AMAP_SECURITY_CODE`
+- `NEXT_PUBLIC_ESP32_STREAM_URL`
+- `NEWAPI_BASE_URL`
+- `NEWAPI_API_KEY`
 
-```bash
-NEWAPI_BASE_URL=https://newkey.versecraft.cn NEWAPI_API_KEY=sk-xxx docker compose up -d
-```
+## 真实链路说明
 
-### 视觉分析链路
+- 浏览器实时状态来自 MQTT over WebSocket。
+- 页面刷新后的初始状态来自 Redis/API，而不是浏览器内存。
+- `/api/iot/status` 是 `/api/iot/state` 的别名。
+- `/api/iot/daemon-status` 用于排查服务端守护进程是否已启动、Redis/MQTT 是否已连通、是否已订阅 `v5/bag/#`。
+- `Broker 在线 != 设备在线`。设备在线只以 `v5/bag/status` 为准。
 
-视觉分析已迁移为双模型架构，代码固定调用 NewAPI 中的稳定别名，不在代码里切底模：
+## 视频链路说明
 
-```text
-图片 -> bag-image -> 结构化结果 -> bag-text -> 中文分析 / 建议 / screen_text
-```
+- LAN 模式只适合同网段联调，直接读取 `NEXT_PUBLIC_ESP32_STREAM_URL`。
+- HTTPS 页面下如果视频流还是 HTTP，会被浏览器按 Mixed Content 拦截。
+- WAN 模式走 `/api/camera/latest` 快照上传与拉取。
 
-- `bag-image`：只负责图像理解，输出结构化 JSON
-- `bag-text`：只负责把结构化结果转换为网页可读结论和设备短文本
-- 实际底层模型切换在 NewAPI 后台完成，不通过环境变量传模型名
+## 命令闭环
 
-### 常用命令
+- 下行 topic：`v5/bag/cmd`
+- ACK topic：`v5/bag/cmd/ack`
+- 交互页里的“发送到设备”会真实调用 `publishCommand()` 下发 `screen_text`。
+- 收到 ACK 后，调试面板和交互页状态都会更新。
 
-```bash
-# 查看服务状态
-docker compose ps
+## 相关文档
 
-# 查看日志
-docker compose logs -f web
-docker compose logs -f mqtt
-
-# 停止所有服务
-docker compose down
-
-# 停止并清除数据卷
-docker compose down -v
-```
-
-### MQTT 测试
-
-```bash
-# 发送设备在线状态
-docker compose exec mqtt mosquitto_pub -t "v5/bag/status" -m '{"status":"online"}'
-
-# 发送传感器数据
-docker compose exec mqtt mosquitto_pub -t "v5/bag/sensors" -m '{"battery":85,"temp":24,"humid":45}'
-
-# 发送 GPS 坐标
-docker compose exec mqtt mosquitto_pub -t "v5/bag/gps" -m '{"lat":31.2304,"lng":121.4737}'
-```
-
-## 项目文档
-
-详细架构文档见 `docs/ARCHITECTURE.md`，IoT 测试指南见 `docs/IOT_TESTING_GUIDE.md`，软硬件对接主文档见 `软硬件对接文档.md`。
+- [架构说明](C:/Users/21276/OneDrive/Desktop/智能书包/docs/ARCHITECTURE.md)
+- [IoT 联调指南](C:/Users/21276/OneDrive/Desktop/智能书包/docs/IOT_TESTING_GUIDE.md)
+- [软硬件对接文档](C:/Users/21276/OneDrive/Desktop/智能书包/软硬件对接文档.md)

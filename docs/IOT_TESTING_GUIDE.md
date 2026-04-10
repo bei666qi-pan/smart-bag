@@ -1,24 +1,16 @@
-# IoT 集成测试指南
+# IoT Testing Guide
 
-## 1. MQTT 测试
+## 1. MQTT addresses
 
-### 线上/现网 MQTT 地址说明
+- Hardware MQTT (TCP): `mqtt.bag.versecraft.cn:1883`
+- Browser MQTT (WSS): `wss://bag.versecraft.cn/mqtt`
 
-- **硬件 MQTT (TCP)**: `mqtt.bag.versecraft.cn:1883`
-- **前端 MQTT (WebSocket)**: `wss://mqtt.bag.versecraft.cn/mqtt`（生产环境标准写法）
+Only the browser should use the WSS address. Hardware must connect to the TCP broker.
 
-### 安装 Mosquitto (本地测试)
+## 2. Local broker setup
 
-**Windows:**
-```bash
-# 使用 Chocolatey
-choco install mosquitto
+Example Mosquitto config:
 
-# 启动 Broker (支持 WebSocket)
-mosquitto -c mosquitto.conf
-```
-
-**mosquitto.conf 示例:**
 ```conf
 listener 1883
 listener 8083
@@ -26,309 +18,131 @@ protocol websockets
 allow_anonymous true
 ```
 
-### 发布测试消息
+Local browser env example:
 
-#### LWT Status (设备在线/离线)
 ```bash
-# 设备在线
-mosquitto_pub -h localhost -t "v5/bag/status" -m '{"status":"online"}'
+NEXT_PUBLIC_MQTT_URL=ws://localhost:8083/mqtt
+NEXT_PUBLIC_MQTT_PATH=/mqtt
+MQTT_SERVER_URL=mqtt://localhost:1883
+REDIS_URL=redis://localhost:6379
+```
 
-# 设备离线
+## 3. Publish test data
+
+### Device online/offline
+
+```bash
+mosquitto_pub -h localhost -t "v5/bag/status" -m '{"status":"online"}'
 mosquitto_pub -h localhost -t "v5/bag/status" -m '{"status":"offline"}'
 ```
 
-#### 传感器数据
+### Sensor data
+
 ```bash
 mosquitto_pub -h localhost -t "v5/bag/sensors" -m '{"battery":75,"temp":26,"humid":50}'
 ```
 
-#### GPS 坐标
+### GPS data
+
 ```bash
-# 上海人民广场
 mosquitto_pub -h localhost -t "v5/bag/gps" -m '{"lat":31.2304,"lng":121.4737}'
-
-# 学校位置示例
-mosquitto_pub -h localhost -t "v5/bag/gps" -m '{"lat":31.2400,"lng":121.4800}'
+mosquitto_pub -h localhost -t "v5/bag/gps" -m '{"lat":31.2310,"lng":121.4740}'
 ```
 
-#### 命令下发与 ACK（最小闭环）
+### Command ACK
 
-- **下发**: `v5/bag/cmd`
-- **ACK**: `v5/bag/cmd/ack`
+Command topic:
 
-下发命令结构（与软硬对接协议一致）：
-
-```json
-{"id":"<uuid>","action":"mode_switch","value":"focus_mode"}
+```text
+v5/bag/cmd
 ```
 
-```json
-{"id":"<uuid>","action":"mode_switch","value":"normal_mode"}
+ACK topic:
+
+```text
+v5/bag/cmd/ack
 ```
 
-```json
-{"id":"<uuid>","action":"screen_text","value":"上课专注模式已开启"}
-```
-
-ACK 结构兼容示例:
+ACK example:
 
 ```json
 {"cmd_id":"abc-123","status":0,"msg":"OK"}
 ```
 
-> 说明：前端内部会把 `id` 作为 `cmd_id` 跟踪 pending 命令；**Broker 已连接 ≠ 设备在线**（设备在线以 `v5/bag/status` 为准）。
+## 4. What to verify in the UI
 
----
+### Dashboard
 
-## 2. Vision Pipeline 测试
+- MQTT status reflects broker connectivity
+- Device status reflects `v5/bag/status`
+- Sensor cards show real values or `—`
+- No fake CPU / memory / bag item placeholders remain
 
-### ESP32 局域网模式
+### Location page
 
-**硬件准备:**
-- ESP32-CAM 模块
-- 固件: [ESP32-CAM MJPEG Streamer](https://github.com/espressif/esp32-camera)
+- Coordinate text updates when `gpsCoords` changes
+- Marker moves to the new point
+- Map center follows the latest point
+- No repeated 500ms resize heartbeat logs
 
-**配置 ESP32:**
-```cpp
-// 设置 MJPEG 流端点
-server.on("/stream", HTTP_GET, handle_jpg_stream);
-```
+### Interaction page
 
-**测试:**
-```bash
-# 浏览器访问
-http://<ESP32_IP>:81/stream
-```
+- `AI 评估` only prepares/reviews `screen_text`
+- `发送到设备` is enabled only when MQTT is connected and the device is online
+- Clicking `发送到设备` produces a real `v5/bag/cmd` command
+- `pendingCmd` appears before ACK and clears after matching ACK
 
-> 说明: **局域网直连仅适合开发/同网段测试**。生产环境不应默认依赖 `192.168.x.x`，建议通过公网代理/中转或使用“广域网模式”走 `/api/camera/latest` 快照链路。
+## 5. Deployment diagnostics
 
-### 广域网模式 (ESP32 上传快照)
+### `/api/iot/status`
 
-**ESP32 POST 请求示例 (Arduino):**
-```cpp
-#include <HTTPClient.h>
+- Alias of `/api/iot/state`
+- Reads the last mirrored snapshot from Redis
 
-void uploadSnapshot() {
-  HTTPClient http;
-  http.begin("http://your-domain.com/api/camera/latest");
-  http.addHeader("Content-Type", "multipart/form-data");
-  
-  // Capture image
-  camera_fb_t *fb = esp_camera_fb_get();
-  
-  // Create form data
-  String boundary = "----WebKitFormBoundary7MA4YWxkTrZu0gW";
-  String formData = "--" + boundary + "\r\n";
-  formData += "Content-Disposition: form-data; name=\"image\"; filename=\"snapshot.jpg\"\r\n";
-  formData += "Content-Type: image/jpeg\r\n\r\n";
-  
-  // Send POST
-  http.POST((uint8_t*)formData.c_str(), fb->len);
-  
-  esp_camera_fb_return(fb);
-  http.end();
+### `/api/iot/daemon-status`
+
+Use this to determine whether deployment wiring is correct:
+
+```json
+{
+  "started": true,
+  "redisConfigured": true,
+  "mqttServerConfigured": true,
+  "redisConnected": true,
+  "mqttConnected": true,
+  "subscribed": true,
+  "lastMirroredAt": "2026-04-11T10:20:30.000Z",
+  "lastMirroredTopic": "v5/bag/gps",
+  "lastError": null
 }
 ```
 
-**测试上传:**
-```bash
-curl -X POST http://localhost:3000/api/camera/latest \
-  -F "image=@test.jpg"
-```
+This endpoint is for observability only. It does not hide broken deployments.
 
-**获取快照:**
-```bash
-curl http://localhost:3000/api/camera/latest > latest.jpg
-```
+## 6. Important semantics
 
----
+- `Broker 在线 != 设备在线`
+- Page refresh depends on Redis/API initial state, not on the browser remembering previous MQTT data
+- If Redis or the daemon is missing, `/api/iot/status` falls back to empty data instead of pretending the device is online
 
-## 3. NewAPI AI 集成测试
+## 7. Video testing
 
-### 配置 NewAPI
+### LAN mode
 
-在 `.env.local` 或部署环境中配置：
+- Only suitable for same-LAN testing
+- Uses `NEXT_PUBLIC_ESP32_STREAM_URL`
+- If the page is HTTPS and the stream is HTTP, the browser will block it as Mixed Content
 
-```bash
-NEWAPI_BASE_URL=https://newkey.versecraft.cn
-NEWAPI_API_KEY=sk_xxx...
-```
+### WAN mode
 
-说明：
+- Upload snapshots to `POST /api/camera/latest`
+- Read snapshots from `GET /api/camera/latest`
+- Use this mode for remote environments where LAN streaming is not available
 
-- 代码固定调用 `bag-image` 与 `bag-text`
-- 底层模型切换在 NewAPI 后台完成，不通过环境变量指定
-- 视觉分析链路为：`图片 -> bag-image -> 结构化结果 -> bag-text -> 中文结果`
+## 8. Suggested validation sequence
 
-### 测试 Server Action
-
-**前端触发 (在 Vision 页面点击 "AI 分析" 按钮)**
-
-**手动测试 API:**
-```bash
-curl -X POST https://newkey.versecraft.cn/v1/chat/completions \
-  -H "Authorization: Bearer YOUR_NEWAPI_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "bag-text",
-    "response_format": { "type": "json_object" },
-    "messages": [
-      { "role": "system", "content": "请严格返回 JSON。" },
-      { "role": "user", "content": "请把这句话润色成适合设备屏幕展示的短文本：记得带上数学作业本" }
-    ]
-  }'
-```
-
----
-
-## 4. AMap(高德) 地图测试
-
-### 配置 AMap Key 与安全密钥
-
-在 `.env.local` 配置:
-
-```bash
-NEXT_PUBLIC_AMAP_KEY=your_key
-NEXT_PUBLIC_AMAP_SECURITY_CODE=your_security_code
-```
-
-### 域名白名单说明（解决 INVALID_USER_DOMAIN）
-
-请在高德控制台为 Key 配置域名白名单，至少包含:
-
-- `localhost`
-- `bag.versecraft.cn`
-
-### 测试 GPS 实时更新
-
-**模拟移动轨迹:**
-```bash
-# 连续发送 GPS 点形成路径
-mosquitto_pub -h localhost -t "v5/bag/gps" -m '{"lat":31.2304,"lng":121.4737}'
-sleep 2
-mosquitto_pub -h localhost -t "v5/bag/gps" -m '{"lat":31.2310,"lng":121.4740}'
-sleep 2
-mosquitto_pub -h localhost -t "v5/bag/gps" -m '{"lat":31.2315,"lng":121.4745}'
-```
-
-**验证 Zero-Render:**
-- 打开浏览器 DevTools -> Performance
-- 开始录制
-- 发送 10+ 个 GPS 点
-- 停止录制
-- **预期结果:** 地图标记移动,但 React 组件无重新渲染 (Zustand 订阅直接更新 DOM)
-
----
-
-## 5. 集成测试脚本
-
-### 完整端到端测试
-
-**test-iot-pipeline.sh:**
-```bash
-#!/bin/bash
-
-echo "=== 智能书包 IoT 集成测试 ==="
-
-# 1. MQTT 连接测试
-echo "1️⃣ 测试 MQTT 连接..."
-mosquitto_pub -h localhost -t "v5/bag/status" -m '{"status":"online"}'
-sleep 1
-
-# 2. 传感器数据
-echo "2️⃣ 发送传感器数据..."
-mosquitto_pub -h localhost -t "v5/bag/sensors" -m '{"battery":90,"temp":25,"humid":48}'
-sleep 1
-
-# 3. GPS 轨迹
-echo "3️⃣ 模拟 GPS 轨迹..."
-for i in {1..5}; do
-  lat=$(echo "31.2304 + $i * 0.001" | bc)
-  lng=$(echo "121.4737 + $i * 0.001" | bc)
-  mosquitto_pub -h localhost -t "v5/bag/gps" -m "{\"lat\":$lat,\"lng\":$lng}"
-  sleep 2
-done
-
-# 4. 上传测试图片
-echo "4️⃣ 测试图片上传..."
-curl -X POST http://localhost:3000/api/camera/latest \
-  -F "image=@test-image.jpg"
-
-echo "✅ 测试完成!"
-```
-
----
-
-## 6. 预期行为
-
-### ✅ 成功指标
-
-1. **MQTT 连接**
-   - TopBar 显示 "MQTT 在线" 绿色徽章
-   - Toast 提示 "MQTT 连接成功"
-   - TopBar 额外显示 **API 拉取状态** 与 **设备在线状态**（三态区分）
-
-2. **传感器数据**
-   - TopBar 实时更新温度、湿度、电量
-   - Dashboard 卡片同步更新
-
-3. **Vision Pipeline**
-   - 局域网模式: 显示 ESP32 实时流
-   - 广域网模式: 每 2 秒刷新快照
-   - AI 分析: 点击按钮后显示 bag-image / bag-text 返回的真实结果
-
-4. **Location Tracking**
-   - 地图加载 AMap(高德) 底图
-   - GPS 点发布后,蓝色 Marker 移动
-   - 轨迹线实时绘制
-   - **关键**: React DevTools 不显示组件重渲染
-
-5. **UI 本地化**
-   - 所有 Toast 消息为简体中文
-   - 错误提示为中文
-
----
-
-## 7. 故障排查
-
-### MQTT 连接失败
-```
-错误: WebSocket connection failed
-解决: 检查 Mosquitto 是否配置 WebSocket listener (端口 8083)
-```
-
-### AMap 不加载 / INVALID_USER_DOMAIN
-```
-错误: INVALID_USER_DOMAIN
-解决:
-1) 确认 NEXT_PUBLIC_AMAP_KEY 与 NEXT_PUBLIC_AMAP_SECURITY_CODE 已配置
-2) 在高德控制台为 Key 配置域名白名单（localhost / bag.versecraft.cn）
-```
-
-### NewAPI 401 / 403
-```
-错误: Authorization failed
-解决: 检查 NEWAPI_API_KEY 是否正确，并确认服务端配置已生效
-```
-
-### ESP32 流无法访问
-```
-错误: Failed to load resource
-解决: 
-1. 确认 ESP32 与电脑在同一局域网
-2. ping ESP32 IP 地址验证连通性
-3. 检查 NEXT_PUBLIC_ESP32_STREAM_URL 配置
-```
-
----
-
-## 8. 生产部署检查清单
-
-- [ ] 配置真实 MQTT Broker (EMQ X / HiveMQ Cloud)
-- [ ] 配置 AMap Key 域名白名单
-- [ ] NewAPI API Key 加密存储 (环境变量)
-- [ ] ESP32 固件 OTA 更新机制
-- [ ] HTTPS 强制 (Nginx 反向代理)
-- [ ] MQTT TLS 加密连接
-- [ ] API Rate Limiting (NewAPI 调用限制)
-- [ ] 日志监控 (Winston / Sentry)
+1. Confirm `/api/iot/daemon-status` shows `started=true` and `subscribed=true`
+2. Publish `v5/bag/status` and confirm the UI switches device status
+3. Publish `v5/bag/sensors` and confirm dashboard cards update
+4. Publish `v5/bag/gps` and confirm the location page center, marker, and coordinate text all move
+5. Use the interaction page to send `screen_text`, then publish an ACK and confirm `pendingCmd` clears

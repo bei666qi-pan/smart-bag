@@ -20,6 +20,7 @@ import {
   Play,
   RotateCcw,
   Send,
+  Sparkles,
   Timer,
 } from "lucide-react"
 import { toast } from "sonner"
@@ -34,13 +35,13 @@ type ChatMessage = {
 
 const initialMessages: ChatMessage[] = [
   { id: "example-1", sender: "parent", text: "你到学校了吗？", time: "08:25", source: "example" },
-  { id: "example-2", sender: "child", text: "是的，我刚进教室！", time: "08:26", source: "example" },
-  { id: "example-3", sender: "parent", text: "好的。记得喝水。", time: "08:27", source: "example" },
+  { id: "example-2", sender: "child", text: "是的，我刚进教室。", time: "08:26", source: "example" },
+  { id: "example-3", sender: "parent", text: "好的，记得喝水。", time: "08:27", source: "example" },
   { id: "example-4", sender: "child", text: "好的，收到！", time: "08:28", source: "example" },
   {
     id: "example-5",
     sender: "system",
-    text: "以下为示例消息记录；新发送内容会先经过 bag-text 评估。",
+    text: "以上为示例消息记录；真实下发请先做 AI 评估，再点击“发送到设备”。",
     time: "08:30",
     source: "example",
   },
@@ -57,10 +58,9 @@ export function InteractionSection() {
   const [messages, setMessages] = useState(initialMessages)
   const [draftMessage, setDraftMessage] = useState("")
   const [lastReview, setLastReview] = useState<DeviceMessageReview | null>(null)
-  const [focusMinutes, setFocusMinutes] = useState(25)
-  const [focusSeconds, setFocusSeconds] = useState(0)
+  const [focusRemainingSeconds, setFocusRemainingSeconds] = useState(25 * 60)
   const [isFocusRunning, setIsFocusRunning] = useState(false)
-  const [screenText, setScreenText] = useState("上课专注模式已开启")
+  const [screenText, setScreenText] = useState("")
   const [isReviewPending, startReviewTransition] = useTransition()
 
   const mqttConnectionStatus = useIoTStore((state) => state.mqttConnectionStatus)
@@ -73,37 +73,37 @@ export function InteractionSection() {
   const publishCommand = useIoTStore((state) => state.publishCommand)
 
   useEffect(() => {
-    let interval: NodeJS.Timeout | null = null
-
-    if (isFocusRunning && (focusMinutes > 0 || focusSeconds > 0)) {
-      interval = setInterval(() => {
-        if (focusSeconds === 0) {
-          if (focusMinutes > 0) {
-            setFocusMinutes((minutes) => minutes - 1)
-            setFocusSeconds(59)
-          }
-        } else {
-          setFocusSeconds((seconds) => seconds - 1)
-        }
-      }, 1000)
+    if (!isFocusRunning || focusRemainingSeconds <= 0) {
+      return
     }
+
+    const interval = window.setInterval(() => {
+      setFocusRemainingSeconds((current) => {
+        if (current <= 1) {
+          window.clearInterval(interval)
+          setIsFocusRunning(false)
+          return 0
+        }
+
+        return current - 1
+      })
+    }, 1000)
 
     return () => {
-      if (interval) clearInterval(interval)
+      window.clearInterval(interval)
     }
-  }, [focusMinutes, focusSeconds, isFocusRunning])
-
-  const resetFocus = () => {
-    setIsFocusRunning(false)
-    setFocusMinutes(25)
-    setFocusSeconds(0)
-  }
+  }, [focusRemainingSeconds, isFocusRunning])
 
   const appendMessages = (...nextMessages: ChatMessage[]) => {
     setMessages((current) => [...current, ...nextMessages])
   }
 
-  const handleSendMessage = () => {
+  const resetFocus = () => {
+    setIsFocusRunning(false)
+    setFocusRemainingSeconds(25 * 60)
+  }
+
+  const handleReviewMessage = () => {
     const trimmed = draftMessage.trim()
 
     if (!trimmed) {
@@ -116,7 +116,7 @@ export function InteractionSection() {
         const review = await reviewDeviceMessageAction({
           text: trimmed,
           context:
-            "这段文本准备发送到智能书包设备屏幕，请优先生成适合儿童设备显示的简体中文短句。",
+            "这段文本准备发送到智能书包设备屏幕，请先生成适合儿童设备显示的简体中文短句。",
         })
 
         setLastReview(review)
@@ -133,52 +133,78 @@ export function InteractionSection() {
           {
             id: `live-system-review-${Date.now() + 1}`,
             sender: "system",
-            text: `AI 建议：${review.screen_text}｜${review.decision_reason}`,
+            text: `AI 评估：${review.screen_text}。${review.decision_reason}`,
             time: nowTime(),
             source: "live",
           },
         )
 
-        if (!review.should_send) {
-          toast.warning("AI 建议先人工确认，不自动下发设备", {
+        if (review.should_send) {
+          toast.success("AI 评估完成", {
+            description: "已生成可发送的 screen_text，请确认后发送到设备。",
+          })
+        } else {
+          toast.warning("AI 建议先人工确认", {
             description: review.analysis,
           })
-          setDraftMessage("")
-          return
         }
-
-        if (mqttConnectionStatus !== "connected" || !deviceOnline) {
-          toast.info("文本已润色，但设备当前不可达，暂未下发", {
-            description: review.screen_text,
-          })
-          setDraftMessage("")
-          return
-        }
-
-        const result = publishCommand("screen_text", review.screen_text)
-        if (!result.ok) {
-          throw new Error(result.error || "设备命令下发失败")
-        }
-
-        appendMessages({
-          id: `live-system-send-${Date.now() + 2}`,
-          sender: "system",
-          text: `已下发设备屏幕文案：${review.screen_text}`,
-          time: nowTime(),
-          source: "live",
-        })
-
-        toast.success("消息已通过 bag-text 处理并发送到设备", {
-          description: review.screen_text,
-        })
-        setDraftMessage("")
       } catch (error) {
-        toast.error("消息处理失败", {
+        toast.error("消息评估失败", {
           description: error instanceof Error ? error.message : "未知错误",
         })
       }
     })
   }
+
+  const handlePublishScreenText = (value: string) => {
+    const trimmed = value.trim()
+    if (!trimmed) {
+      toast.warning("当前没有可发送的 screen_text")
+      return
+    }
+
+    const result = publishCommand("screen_text", trimmed)
+    if (!result.ok) {
+      toast.error("命令下发失败", {
+        description: result.error || "未知错误",
+      })
+      return
+    }
+
+    appendMessages({
+      id: `live-system-send-${Date.now()}`,
+      sender: "system",
+      text: `已真实下发 screen_text，等待设备 ACK：${trimmed}`,
+      time: nowTime(),
+      source: "live",
+    })
+
+    toast.success("已发送到 v5/bag/cmd", {
+      description: trimmed,
+    })
+  }
+
+  const handleQuickCommand = (action: "mode_switch" | "screen_text", value: string) => {
+    const result = publishCommand(action, value)
+    if (!result.ok) {
+      toast.error("命令下发失败", {
+        description: result.error || "未知错误",
+      })
+      return
+    }
+
+    toast.success("命令已下发", {
+      description: `${action}: ${value}`,
+    })
+  }
+
+  const focusMinutes = Math.floor(focusRemainingSeconds / 60)
+  const focusSeconds = focusRemainingSeconds % 60
+  const canSendToDevice =
+    mqttConnectionStatus === "connected" &&
+    deviceOnline &&
+    screenText.trim().length > 0 &&
+    !pendingCmd
 
   return (
     <div className="flex flex-col gap-4">
@@ -196,15 +222,15 @@ export function InteractionSection() {
                 消息
               </CardTitle>
               <Badge variant="outline" className="text-[10px]">
-                发送前先走 bag-text
+                真实发送走 v5/bag/cmd
               </Badge>
             </div>
           </CardHeader>
           <CardContent>
             <div className="flex flex-col gap-3">
               <div className="rounded-lg border border-dashed border-border bg-muted/20 p-2 text-[11px] leading-5 text-muted-foreground">
-                当前列表里带“示例”的消息仅用于占位演示；点击“发送消息”后，新的文本会先经
-                bag-text 润色与风险判断，再决定是否下发设备。
+                “AI 评估”只负责生成和检查屏显文案；“发送到设备”按钮只会在 MQTT 已连接且设备在线时开启，
+                点击后会真实调用 `publishCommand()` 把 `screen_text` 下发到 `v5/bag/cmd`。
               </div>
 
               <ScrollArea className="h-64">
@@ -267,7 +293,7 @@ export function InteractionSection() {
                   <div className="mb-2 flex items-center justify-between gap-3">
                     <div className="text-sm font-medium text-foreground">最近一次 bag-text 评估</div>
                     <Badge variant={lastReview.should_send ? "secondary" : "destructive"}>
-                      {lastReview.should_send ? "可自动下发" : "需人工确认"}
+                      {lastReview.should_send ? "建议可直发" : "需人工确认"}
                     </Badge>
                   </div>
                   <div className="grid gap-2 text-xs text-muted-foreground sm:grid-cols-2">
@@ -291,26 +317,55 @@ export function InteractionSection() {
                 </div>
               ) : null}
 
-              <div className="flex items-center gap-2">
+              {lastCmdAck ? (
+                <div
+                  className={`rounded-lg border p-3 text-xs ${
+                    lastCmdAck.status === 0
+                      ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                      : "border-rose-200 bg-rose-50 text-rose-800"
+                  }`}
+                >
+                  最近设备 ACK：{lastCmdAck.status === 0 ? "成功" : "失败"} {lastCmdAck.cmd_id}
+                  {lastCmdAck.msg ? `，${lastCmdAck.msg}` : ""}
+                  {lastCmdAck.ts ? `，${lastCmdAck.ts}` : ""}
+                </div>
+              ) : null}
+
+              <div className="flex flex-col gap-2">
                 <Input
                   value={draftMessage}
                   onChange={(event) => setDraftMessage(event.target.value)}
-                  placeholder="输入要发送到设备的消息..."
+                  placeholder="输入想展示给设备的原始消息..."
                   className="flex-1 text-sm"
                 />
-                <Button
-                  size="icon"
-                  className="shrink-0"
-                  aria-label="发送消息"
-                  onClick={handleSendMessage}
-                  disabled={isReviewPending}
-                >
-                  {isReviewPending ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <Button
+                    onClick={handleReviewMessage}
+                    disabled={isReviewPending || draftMessage.trim().length === 0}
+                    className="gap-2 sm:flex-1"
+                  >
+                    {isReviewPending ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        AI 评估中
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="h-4 w-4" />
+                        AI 评估
+                      </>
+                    )}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => handlePublishScreenText(screenText)}
+                    disabled={!canSendToDevice}
+                    className="gap-2 sm:flex-1"
+                  >
                     <Send className="h-4 w-4" />
-                  )}
-                </Button>
+                    发送到设备
+                  </Button>
+                </div>
               </div>
             </div>
           </CardContent>
@@ -394,12 +449,16 @@ export function InteractionSection() {
             <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
               <span className="font-mono">LastSeen: {lastSeenAt ?? "-"}</span>
               <Separator orientation="vertical" className="h-4" />
-              <span className="font-mono">待回执命令: {pendingCmd ? pendingCmd.cmd_id : "-"}</span>
+              <span className="font-mono">
+                待确认命令: {pendingCmd ? pendingCmd.cmd_id : "-"}
+              </span>
               <Separator orientation="vertical" className="h-4" />
               <span className="font-mono">
                 最近 ACK:{" "}
                 {lastCmdAck
-                  ? `${lastCmdAck.status === 0 ? "成功" : "失败"} ${lastCmdAck.cmd_id}${lastCmdAck.ts ? ` @ ${lastCmdAck.ts}` : ""}`
+                  ? `${lastCmdAck.status === 0 ? "成功" : "失败"} ${lastCmdAck.cmd_id}${
+                      lastCmdAck.ts ? ` @ ${lastCmdAck.ts}` : ""
+                    }`
                   : "-"}
               </span>
             </div>
@@ -412,13 +471,13 @@ export function InteractionSection() {
 
             {mqttConnectionStatus !== "connected" ? (
               <div className="rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">
-                MQTT 未连接，命令下发已禁用。请先确认 Broker 连接状态为 connected。
+                MQTT 未连接，发送入口已禁用。请先确认 Broker 连接状态为 connected。
               </div>
             ) : null}
 
             {mqttConnectionStatus === "connected" && !deviceOnline ? (
               <div className="rounded-md border border-sky-200 bg-sky-50 p-2 text-xs text-sky-800">
-                Broker 已连接，但设备仍离线。bag-text 可以先生成建议文本，但不会自动视为设备已成功接收。
+                Broker 已连接，但设备仍离线。可以先做 AI 评估，但“发送到设备”会保持禁用。
               </div>
             ) : null}
 
@@ -426,7 +485,7 @@ export function InteractionSection() {
               <Button
                 size="sm"
                 variant="outline"
-                onClick={() => publishCommand("mode_switch", "focus_mode")}
+                onClick={() => handleQuickCommand("mode_switch", "focus_mode")}
                 disabled={mqttConnectionStatus !== "connected"}
               >
                 发送 mode_switch(focus_mode)
@@ -434,7 +493,7 @@ export function InteractionSection() {
               <Button
                 size="sm"
                 variant="outline"
-                onClick={() => publishCommand("mode_switch", "normal_mode")}
+                onClick={() => handleQuickCommand("mode_switch", "normal_mode")}
                 disabled={mqttConnectionStatus !== "connected"}
               >
                 发送 mode_switch(normal_mode)
@@ -445,22 +504,20 @@ export function InteractionSection() {
               <Input
                 value={screenText}
                 onChange={(event) => setScreenText(event.target.value)}
-                placeholder="输入 screen_text 文本..."
+                placeholder="输入或编辑 screen_text ..."
                 className="text-sm"
               />
               <Button
                 size="sm"
-                onClick={() => publishCommand("screen_text", screenText)}
-                disabled={
-                  mqttConnectionStatus !== "connected" || screenText.trim().length === 0
-                }
+                onClick={() => handleQuickCommand("screen_text", screenText)}
+                disabled={mqttConnectionStatus !== "connected" || screenText.trim().length === 0}
               >
-                直接发送 screen_text
+                发送当前 screen_text
               </Button>
             </div>
 
             <div className="rounded-md border border-border bg-muted/20 p-2 text-xs text-muted-foreground">
-              上方“发送消息”会先经过 bag-text；这里只保留原始 MQTT 下发入口，便于联调时直接验证设备协议。
+              上方发送入口会真实下发 MQTT 命令；消息区只保留 AI 评估结果和设备 ACK，不再保留“看起来可发、实际不发”的假入口。
             </div>
 
             {pendingCmd ? (
@@ -478,9 +535,9 @@ export function InteractionSection() {
                     : "border-rose-200 bg-rose-50 text-rose-800"
                 }`}
               >
-                ACK：<span className="font-mono">{lastCmdAck.cmd_id}</span>，
-                {lastCmdAck.status === 0 ? "成功" : "失败"}（status=
-                <span className="font-mono">{lastCmdAck.status}</span>）
+                ACK: <span className="font-mono">{lastCmdAck.cmd_id}</span>，
+                {lastCmdAck.status === 0 ? "成功" : "失败"}，status=
+                <span className="font-mono">{lastCmdAck.status}</span>
                 {lastCmdAck.msg ? `，msg=${lastCmdAck.msg}` : ""}
                 {lastCmdAck.ts ? `，时间=${lastCmdAck.ts}` : ""}
               </div>
