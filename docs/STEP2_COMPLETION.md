@@ -69,19 +69,18 @@ useEffect(() => {
 }, [isWan])
 ```
 
-**Coze AI 集成 (Native Fetch):**
+**NewAPI 双模型集成 (Native Fetch):**
 ```typescript
-const response = await fetch('https://api.coze.cn/v3/chat', {
+const response = await fetch('https://newkey.versecraft.cn/v1/chat/completions', {
   method: 'POST',
   headers: {
-    'Authorization': `Bearer ${process.env.COZE_TOKEN}`,
+    'Authorization': `Bearer ${process.env.NEWAPI_API_KEY}`,
     'Content-Type': 'application/json',
   },
   body: JSON.stringify({
-    bot_id: process.env.COZE_BOT_ID,
-    additional_messages: [
-      { role: 'user', content: base64Image, content_type: 'image' }
-    ],
+    model: 'bag-image',
+    messages,
+    response_format: { type: 'json_object' },
   }),
 })
 ```
@@ -226,9 +225,9 @@ NEXT_PUBLIC_MQTT_URL=ws://localhost:8083/mqtt
 # Mapbox Configuration
 NEXT_PUBLIC_MAPBOX_TOKEN=pk.eyJ1...
 
-# Coze AI Configuration
-COZE_TOKEN=pat_xxx...
-COZE_BOT_ID=7xxx...
+# NewAPI Configuration
+NEWAPI_BASE_URL=https://newkey.versecraft.cn
+NEWAPI_API_KEY=sk_xxx...
 
 # ESP32 Camera Configuration
 NEXT_PUBLIC_ESP32_STREAM_URL=http://192.168.1.100:81/stream
@@ -249,7 +248,7 @@ NEXT_PUBLIC_ESP32_STREAM_URL=http://192.168.1.100:81/stream
 
 ### Server Action 错误消息
 - ✅ `"图片格式错误"`
-- ✅ `"Coze 配置缺失"`
+- ✅ `"NewAPI 配置缺失"`
 - ✅ `"服务器内部错误"`
 
 ### UI 标签
@@ -280,7 +279,7 @@ NEXT_PUBLIC_ESP32_STREAM_URL=http://192.168.1.100:81/stream
 - Mosquitto 安装配置
 - MQTT 测试消息格式
 - ESP32 硬件配置
-- Coze API 测试
+- NewAPI API 测试
 - 集成测试脚本
 - 故障排查
 
@@ -341,9 +340,9 @@ if (!token || token === 'your_mapbox_token_here') {
 }
 ```
 
-2. **Coze Token 服务器端专用**
+2. **NewAPI API Key 服务器端专用**
 ```typescript
-// COZE_TOKEN (无 NEXT_PUBLIC_ 前缀)
+// NEWAPI_API_KEY (无 NEXT_PUBLIC_ 前缀)
 // 仅在 Server Action 中使用
 ```
 
@@ -395,7 +394,7 @@ experimental: {
 | Sensor 更新 Zustand | `hooks/useMqttClient.ts` | ✅ | TopBar 数值变化 |
 | Vision 局域网模式 | `vision-section.tsx` | ✅ | ESP32 直连流 |
 | Vision 广域网模式 | `vision-section.tsx` + API | ✅ | Polling `/api/camera/latest` |
-| Coze AI 分析 | `analyze-image.ts` | ✅ | 点击 "AI 分析" 按钮 |
+| NewAPI AI 分析 | `analyze-image.ts` | ✅ | 点击 "AI 分析" 按钮 |
 | Server Action Body Limit | `next.config.mjs` | ✅ | 10MB 配置 |
 | Mapbox Zero-Render | `location-section.tsx` | ✅ | DevTools Profiler |
 | GPS Marker 更新 | `location-section.tsx` | ✅ | 发布 `v5/bag/gps` |
@@ -436,12 +435,12 @@ useIoTStore.subscribe(
 - Web 客户端 Polling 拉取
 - Next.js API Route 中转
 
-### 4. Native Coze Integration
+### 4. Native NewAPI Integration
 **挑战:** 官方 SDK 未提供或不适用
 
 **解决方案:**
 - 直接使用 `fetch` 调用 REST API
-- 严格遵循 Coze v3 接口规范
+- 严格遵循 OpenAI-compatible chat/completions 规范
 - Base64 图片编码
 
 ---
@@ -477,7 +476,7 @@ useIoTStore.subscribe(
 - [x] MQTT Hook 实现 (Strict Mode Safe)
 - [x] Zustand Store 扩展 (GPS Coords)
 - [x] Vision Dual-Mode 实现
-- [x] Coze AI Server Action
+- [x] NewAPI AI Server Action
 - [x] Camera API Route (POST/GET)
 - [x] Mapbox Zero-Render Integration
 - [x] Next.js Config (Body Size Limit)

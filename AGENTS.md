@@ -46,7 +46,7 @@ Create `.env.local` (gitignored) with these keys. Only `NEXT_PUBLIC_MQTT_URL` is
 
 - `NEXT_PUBLIC_MQTT_URL` — MQTT broker WebSocket URL (set to local broker ws endpoint)
 - `NEXT_PUBLIC_AMAP_KEY` / `NEXT_PUBLIC_AMAP_SECURITY_CODE` — AMap API keys (location page only)
-- `COZE_TOKEN` / `COZE_BOT_ID` — Coze AI API credentials (vision AI analysis only, server-side)
+- `NEWAPI_BASE_URL` / `NEWAPI_API_KEY` — NewAPI 服务端配置（视觉分析与文本分析共用，代码固定调用 `bag-image` / `bag-text`）
 - `NEXT_PUBLIC_ESP32_STREAM_URL` — ESP32 camera stream URL (vision page only)
 
 ### Non-obvious caveats

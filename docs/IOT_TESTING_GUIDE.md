@@ -143,19 +143,22 @@ curl http://localhost:3000/api/camera/latest > latest.jpg
 
 ---
 
-## 3. Coze AI 集成测试
+## 3. NewAPI AI 集成测试
 
-### 获取 Coze Token
+### 配置 NewAPI
 
-1. 访问 [Coze 开放平台](https://www.coze.cn/open/oauth/apps)
-2. 创建应用获取 `Access Token`
-3. 创建 Bot 获取 `Bot ID`
-4. 配置环境变量:
+在 `.env.local` 或部署环境中配置：
 
 ```bash
-COZE_TOKEN=pat_xxx...
-COZE_BOT_ID=7xxx...
+NEWAPI_BASE_URL=https://newkey.versecraft.cn
+NEWAPI_API_KEY=sk_xxx...
 ```
+
+说明：
+
+- 代码固定调用 `bag-image` 与 `bag-text`
+- 底层模型切换在 NewAPI 后台完成，不通过环境变量指定
+- 视觉分析链路为：`图片 -> bag-image -> 结构化结果 -> bag-text -> 中文结果`
 
 ### 测试 Server Action
 
@@ -163,19 +166,15 @@ COZE_BOT_ID=7xxx...
 
 **手动测试 API:**
 ```bash
-curl -X POST https://api.coze.cn/v3/chat \
-  -H "Authorization: Bearer YOUR_TOKEN" \
+curl -X POST https://newkey.versecraft.cn/v1/chat/completions \
+  -H "Authorization: Bearer YOUR_NEWAPI_KEY" \
   -H "Content-Type: application/json" \
   -d '{
-    "bot_id": "YOUR_BOT_ID",
-    "user_id": "test_user",
-    "stream": false,
-    "additional_messages": [
-      {
-        "role": "user",
-        "content": "请分析这张图片",
-        "content_type": "text"
-      }
+    "model": "bag-text",
+    "response_format": { "type": "json_object" },
+    "messages": [
+      { "role": "system", "content": "请严格返回 JSON。" },
+      { "role": "user", "content": "请把这句话润色成适合设备屏幕展示的短文本：记得带上数学作业本" }
     ]
   }'
 ```
@@ -276,7 +275,7 @@ echo "✅ 测试完成!"
 3. **Vision Pipeline**
    - 局域网模式: 显示 ESP32 实时流
    - 广域网模式: 每 2 秒刷新快照
-   - AI 分析: 点击按钮后显示 Coze 返回结果
+   - AI 分析: 点击按钮后显示 bag-image / bag-text 返回的真实结果
 
 4. **Location Tracking**
    - 地图加载 AMap(高德) 底图
@@ -306,10 +305,10 @@ echo "✅ 测试完成!"
 2) 在高德控制台为 Key 配置域名白名单（localhost / bag.versecraft.cn）
 ```
 
-### Coze API 401
+### NewAPI 401 / 403
 ```
 错误: Authorization failed
-解决: 检查 COZE_TOKEN 是否过期,重新生成 Token
+解决: 检查 NEWAPI_API_KEY 是否正确，并确认服务端配置已生效
 ```
 
 ### ESP32 流无法访问
@@ -327,9 +326,9 @@ echo "✅ 测试完成!"
 
 - [ ] 配置真实 MQTT Broker (EMQ X / HiveMQ Cloud)
 - [ ] 配置 AMap Key 域名白名单
-- [ ] Coze Token 加密存储 (环境变量)
+- [ ] NewAPI API Key 加密存储 (环境变量)
 - [ ] ESP32 固件 OTA 更新机制
 - [ ] HTTPS 强制 (Nginx 反向代理)
 - [ ] MQTT TLS 加密连接
-- [ ] API Rate Limiting (Coze 调用限制)
+- [ ] API Rate Limiting (NewAPI 调用限制)
 - [ ] 日志监控 (Winston / Sentry)

@@ -23,16 +23,17 @@
 │         │                    │                    │             │
 │  ┌──────▼──────┐    ┌────────▼──────┐    ┌───────▼──────┐     │
 │  │ useMqttClient│    │ AMap JS API   │    │ Server Action│     │
-│  │   (Hook)     │    │(Zero-Render)  │    │  (Coze API)  │     │
+│  │   (Hook)     │    │(Zero-Render)  │    │  (NewAPI)    │     │
 │  └──────────────┘    └───────────────┘    └──────────────┘     │
 │         ▲                    ▲                    ▲             │
 └─────────┼────────────────────┼────────────────────┼─────────────┘
           │                    │                    │
           │                    │                    │
 ┌─────────▼────────┐  ┌────────▼────────┐  ┌───────▼──────┐
-│   MQTT Broker    │  │  GPS Module     │  │  Coze Cloud  │
-│  (Mosquitto/EMQ) │  │  (BeiDou/GPS)   │  │  (AI Model)  │
-└──────────────────┘  └─────────────────┘  └──────────────┘
+│   MQTT Broker    │  │  GPS Module     │  │ NewAPI 网关  │
+│  (Mosquitto/EMQ) │  │  (BeiDou/GPS)   │  │ (bag-image/  │
+└──────────────────┘  └─────────────────┘  │  bag-text)   │
+                                           └──────────────┘
           ▲                    ▲                    
           │                    │                    
 ┌─────────▼────────────────────▼────────┐
@@ -193,34 +194,29 @@ User Click "AI 分析" →
     FormData → 
       Server Action → 
         Buffer.from(arrayBuffer()) → 
-          Base64 Encode → 
-            Coze REST API → 
-              Analysis Result → 
-                Update UI
+          Base64 Encode →
+            bag-image (NewAPI / chat/completions) →
+              Structured JSON →
+                bag-text (NewAPI / chat/completions) →
+                  Analysis Result →
+                    Update UI
 ```
 
-#### Coze API 调用 (Native Fetch)
+#### NewAPI 调用 (Native Fetch)
 
-**CRITICAL: 不使用 SDK,直接 fetch**
+**CRITICAL: 不使用 SDK，直接 fetch OpenAI-compatible 接口**
 
 ```typescript
-const response = await fetch('https://api.coze.cn/v3/chat', {
+const response = await fetch(`${normalizedBaseUrl}/chat/completions`, {
   method: 'POST',
   headers: {
-    'Authorization': `Bearer ${process.env.COZE_TOKEN}`,
+    'Authorization': `Bearer ${process.env.NEWAPI_API_KEY}`,
     'Content-Type': 'application/json',
   },
   body: JSON.stringify({
-    bot_id: process.env.COZE_BOT_ID,
-    user_id: 'web_user',
-    stream: false,
-    additional_messages: [
-      {
-        role: 'user',
-        content: base64Image,
-        content_type: 'image',
-      },
-    ],
+    model: 'bag-image',
+    messages,
+    response_format: { type: 'json_object' },
   }),
 })
 ```
@@ -360,9 +356,9 @@ MQTT_SERVER_URL=mqtt://mqtt.bag.versecraft.cn:1883
 NEXT_PUBLIC_AMAP_KEY=your_key
 NEXT_PUBLIC_AMAP_SECURITY_CODE=your_security_code
 
-# Coze AI
-COZE_TOKEN=pat_xxx...
-COZE_BOT_ID=7xxx...
+# NewAPI AI
+NEWAPI_BASE_URL=https://newkey.versecraft.cn
+NEWAPI_API_KEY=sk_xxx...
 
 # ESP32
 NEXT_PUBLIC_ESP32_STREAM_URL=http://<YOUR_STREAM_HOST>/stream
@@ -372,10 +368,10 @@ NEXT_PUBLIC_ESP32_STREAM_URL=http://<YOUR_STREAM_HOST>/stream
 
 1. **Public vs Private:**
    - `NEXT_PUBLIC_*`: 暴露给客户端 (AMap, MQTT URL)
-   - 无前缀: 仅服务器端 (Coze Token)
+   - 无前缀: 仅服务器端 (NewAPI API Key 等敏感配置)
 
 2. **Token 管理:**
-   - Coze Token: 服务器端专用
+   - NewAPI API Key: 服务器端专用
    - AMap Key: Public,但需要配置域名白名单与安全密钥
 
 ---
@@ -401,7 +397,7 @@ toast.success('MQTT Connected', {
 ```typescript
 return {
   success: false,
-  message: 'Coze 配置缺失', // ✅ 中文
+  message: 'NewAPI 配置缺失', // ✅ 中文
 }
 ```
 
@@ -424,7 +420,7 @@ return {
 | **状态管理** | Zustand | 5.0.11 | 全局 IoT 状态 |
 | **IoT 通信** | mqtt.js | Latest | WebSocket MQTT 客户端 |
 | **地图渲染** | AMap JS API | Latest | 零渲染地图更新 |
-| **AI 推理** | Coze REST API | v3 | 图像分析 |
+| **AI 推理** | NewAPI | OpenAI-compatible | `bag-image` + `bag-text` 双模型 |
 | **UI 组件** | shadcn/ui | - | Radix UI 封装 |
 | **提示组件** | sonner | 1.7.1 | Toast 通知 |
 
@@ -438,7 +434,7 @@ return {
 - **GPS 更新频率**: 1-2 Hz
 - **地图渲染**: 0 React re-renders
 - **Vision 流**: 30 fps (LAN) / 0.5 fps (WAN)
-- **AI 分析**: < 3s (Coze API)
+- **AI 分析**: < 3s（目标值，取决于 NewAPI 后台模型与网络）
 
 ### 监控要点
 
@@ -456,7 +452,7 @@ return {
 [MQTT] 连接成功
 [MQTT] GPS 更新: [121.4737, 31.2304]
 [AMap] 地图加载完成
-[Coze] 正在调用大模型分析...
+[NewAPI] 正在调用 bag-image / bag-text...
 ```
 
 ---
@@ -467,13 +463,13 @@ return {
 - [x] 安装 Mosquitto (本地 MQTT Broker)
 - [x] 配置 `.env.local`
 - [x] 配置 AMap Key
-- [x] 注册 Coze 账号
+- [x] 配置可用的 NewAPI 网关与别名模型
 
 ### 生产环境
 - [ ] 使用云端 MQTT (HiveMQ Cloud / EMQ X Cloud)
 - [ ] 配置 MQTT TLS 加密
 - [ ] 配置 AMap Key 域名白名单
-- [ ] Coze API Rate Limiting
+- [ ] NewAPI 调用限流与告警
 - [ ] Nginx 反向代理 ESP32 流
 - [ ] 日志收集 (Winston)
 - [ ] 错误监控 (Sentry)

@@ -27,8 +27,8 @@ services:
     environment:
       - REDIS_URL=redis://redis:6379
       - MQTT_SERVER_URL=mqtt://mqtt:1883
-      - COZE_TOKEN=${COZE_TOKEN:-}
-      - COZE_BOT_ID=${COZE_BOT_ID:-}
+      - NEWAPI_BASE_URL=${NEWAPI_BASE_URL:-https://newkey.versecraft.cn}
+      - NEWAPI_API_KEY=${NEWAPI_API_KEY:-}
     depends_on:
       - mqtt
       - redis

@@ -4,7 +4,7 @@ IoT 数字孪生仪表盘 — 实时传感器监测、视觉识别、位置追�
 
 ## 快速入口（联调必看）
 
-- **软硬对接文档（主入口）**：`软硬对接文档.md`
+- **软硬件对接文档（主入口）**：`软硬件对接文档.md`
 - **架构**：`docs/ARCHITECTURE.md`
 - **IoT 集成测试**：`docs/IOT_TESTING_GUIDE.md`
 - **服务端守护进程状态（只读诊断）**：`/api/iot/daemon-status`
@@ -18,7 +18,7 @@ IoT 数字孪生仪表盘 — 实时传感器监测、视觉识别、位置追�
 - **IoT 通信**: MQTT over WebSocket (mqtt.js)
 - **地图**: 高德地图 JS API v2.0
 - **UI**: shadcn/ui + Tailwind CSS v4 + Radix UI
-- **AI**: Coze REST API v3
+- **AI**: NewAPI（OpenAI-compatible，固定模型别名 `bag-image` / `bag-text`）
 
 ## 本地开发
 
@@ -71,8 +71,20 @@ NEXT_PUBLIC_AMAP_KEY=xxx NEXT_PUBLIC_AMAP_SECURITY_CODE=xxx docker compose build
 运行时的服务端变量通过环境变量传入:
 
 ```bash
-COZE_TOKEN=pat_xxx COZE_BOT_ID=7xxx docker compose up -d
+NEWAPI_BASE_URL=https://newkey.versecraft.cn NEWAPI_API_KEY=sk-xxx docker compose up -d
 ```
+
+### 视觉分析链路
+
+视觉分析已迁移为双模型架构，代码固定调用 NewAPI 中的稳定别名，不在代码里切底模：
+
+```text
+图片 -> bag-image -> 结构化结果 -> bag-text -> 中文分析 / 建议 / screen_text
+```
+
+- `bag-image`：只负责图像理解，输出结构化 JSON
+- `bag-text`：只负责把结构化结果转换为网页可读结论和设备短文本
+- 实际底层模型切换在 NewAPI 后台完成，不通过环境变量传模型名
 
 ### 常用命令
 
@@ -106,4 +118,4 @@ docker compose exec mqtt mosquitto_pub -t "v5/bag/gps" -m '{"lat":31.2304,"lng":
 
 ## 项目文档
 
-详细架构文档见 `docs/ARCHITECTURE.md`，IoT 测试指南见 `docs/IOT_TESTING_GUIDE.md`，软硬对接主文档见 `软硬对接文档.md`。
+详细架构文档见 `docs/ARCHITECTURE.md`，IoT 测试指南见 `docs/IOT_TESTING_GUIDE.md`，软硬件对接主文档见 `软硬件对接文档.md`。
