@@ -41,6 +41,17 @@ services:
       - "1883:1883"
     expose:
       - "8083"
+    networks:
+      default:
+      coolify:
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=coolify
+      - traefik.http.routers.mqtt-ws.entrypoints=https
+      - traefik.http.routers.mqtt-ws.rule=Host(`mqtt.bag.versecraft.cn`)
+      - traefik.http.routers.mqtt-ws.tls=true
+      - traefik.http.routers.mqtt-ws.tls.certresolver=letsencrypt
+      - traefik.http.services.mqtt-ws.loadbalancer.server.port=8083
     volumes:
       - ./mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
       - mosquitto_data:/mosquitto/data
@@ -61,3 +72,7 @@ volumes:
   mosquitto_data:
   mosquitto_log:
   redis_data:
+
+networks:
+  coolify:
+    external: true

@@ -1,19 +1,9 @@
+import Redis from 'ioredis'
 import { NextResponse } from 'next/server'
 import { startRedisBackedMqttDaemon } from '@/lib/iot/redis-mqtt-daemon'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
-
-type RedisClientLike = {
-  hgetall: (key: string) => Promise<Record<string, string>>
-  disconnect?: () => void
-  quit?: () => Promise<unknown>
-}
-
-type RedisConstructor = new (
-  url: string,
-  options: Record<string, unknown>
-) => RedisClientLike
 
 function createFallbackState(error?: string) {
   return {
@@ -29,34 +19,22 @@ function createFallbackState(error?: string) {
   }
 }
 
-async function loadRedisConstructor(): Promise<RedisConstructor> {
-  const dynamicImport = new Function('moduleName', 'return import(moduleName)')
-  const redisModule = (await dynamicImport('ioredis')) as { default: RedisConstructor }
-  return redisModule.default
-}
-
 export async function GET() {
   // Best-effort: ensure server daemon is started in deployments where instrumentation is not triggered reliably.
   // Do not block response on daemon connectivity.
   void startRedisBackedMqttDaemon()
 
-  if (!process.env.REDIS_URL) {
+  const redisUrl = process.env.REDIS_URL
+
+  if (!redisUrl) {
     console.warn('[API] REDIS_URL is not configured, returning fallback IoT state')
     return NextResponse.json(createFallbackState('redis_unconfigured'))
   }
 
-  let redis: RedisClientLike | null = null
+  let redis: Redis | null = null
 
   try {
-    let Redis: RedisConstructor
-    try {
-      Redis = await loadRedisConstructor()
-    } catch (importError) {
-      console.error('[API] Failed to import ioredis:', importError)
-      return NextResponse.json(createFallbackState('redis_import_failed'))
-    }
-
-    redis = new Redis(process.env.REDIS_URL, {
+    redis = new Redis(redisUrl, {
       maxRetriesPerRequest: 3,
       lazyConnect: true,
     })
