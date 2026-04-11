@@ -89,6 +89,7 @@ Returns diagnostic-only daemon state without leaking secrets:
 ```json
 {
   "started": true,
+  "starting": false,
   "redisConfigured": true,
   "mqttServerConfigured": true,
   "redisConnected": true,
@@ -139,6 +140,9 @@ Command payload:
 { "id": "uuid", "action": "screen_text", "value": "记得带作业本" }
 ```
 
+The standard interaction flow is user input -> `AI 评估` with `bag-text` -> confirm `screen_text` -> `发送到设备`.
+If NewAPI or `bag-text` fails, the IoT debug panel can still publish `screen_text` and `mode_switch` directly for hardware validation.
+
 ACK payload:
 
 ```json
@@ -158,6 +162,20 @@ ACK payload:
 - Device uploads snapshots to `POST /api/camera/latest`
 - Browser reads snapshots from `GET /api/camera/latest`
 - This is the supported remote fallback when direct LAN streaming is unavailable
+- Snapshot upload requires `x-device-token: bag_secret_2026`
+- Snapshot upload uses `multipart/form-data` field name `image`
+- If no snapshot has been uploaded, `GET /api/camera/latest` returns `200` with JSON empty state instead of `404`
+
+Empty snapshot response:
+
+```json
+{
+  "success": true,
+  "hasSnapshot": false,
+  "message": "暂无快照",
+  "timestamp": null
+}
+```
 
 ## Environment Summary
 

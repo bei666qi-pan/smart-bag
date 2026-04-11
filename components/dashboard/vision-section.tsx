@@ -266,6 +266,15 @@ export function VisionSection() {
         }
 
         const contentType = response.headers.get("content-type") || ""
+        if (contentType.includes("application/json")) {
+          const body = await response.json().catch(() => null)
+          throw new Error(
+            body?.message
+              ? `远程快照空态：${body.message}`
+              : "远程快照接口当前没有可分析的图片。",
+          )
+        }
+
         if (!contentType.startsWith("image/")) {
           throw new Error("远程快照接口没有返回图片内容，无法继续分析。")
         }
@@ -454,7 +463,8 @@ export function VisionSection() {
                 <div className="rounded-lg border border-dashed border-border bg-muted/20 p-2 text-[11px] leading-5 text-muted-foreground">
                   真实链路：图片 → <span className="font-medium text-foreground">bag-image</span> →
                   结构化结果 → <span className="font-medium text-foreground">bag-text</span> →
-                  页面中文结论。
+                  页面中文结论。LAN 流只适合同网段；WAN 快照需要设备先用 `x-device-token` 上传到 `/api/camera/latest`，
+                  未配置公网快照源时这里只显示空态。
                 </div>
 
                 {payload ? (

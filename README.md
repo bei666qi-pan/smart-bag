@@ -52,12 +52,15 @@ pnpm start
 - LAN 模式只适合同网段联调，直接读取 `NEXT_PUBLIC_ESP32_STREAM_URL`。
 - HTTPS 页面下如果视频流还是 HTTP，会被浏览器按 Mixed Content 拦截。
 - WAN 模式走 `/api/camera/latest` 快照上传与拉取。
+- WAN 上传必须带 `x-device-token: bag_secret_2026`，并使用 `multipart/form-data` 字段 `image`。
+- WAN 暂无快照时返回 `200 + JSON` 空态，不再用 404 表示“接口不存在”。
 
 ## 命令闭环
 
 - 下行 topic：`v5/bag/cmd`
 - ACK topic：`v5/bag/cmd/ack`
 - 交互页里的“发送到设备”会真实调用 `publishCommand()` 下发 `screen_text`。
+- 如果 AI 评估失败，IoT 调试面板仍可直接下发 `screen_text` / `mode_switch` 做硬件联调。
 - 收到 ACK 后，调试面板和交互页状态都会更新。
 
 ## 相关文档

@@ -58,6 +58,7 @@ export function InteractionSection() {
   const [messages, setMessages] = useState(initialMessages)
   const [draftMessage, setDraftMessage] = useState("")
   const [lastReview, setLastReview] = useState<DeviceMessageReview | null>(null)
+  const [reviewError, setReviewError] = useState<string | null>(null)
   const [focusRemainingSeconds, setFocusRemainingSeconds] = useState(25 * 60)
   const [isFocusRunning, setIsFocusRunning] = useState(false)
   const [screenText, setScreenText] = useState("")
@@ -113,12 +114,30 @@ export function InteractionSection() {
 
     startReviewTransition(async () => {
       try {
-        const review = await reviewDeviceMessageAction({
+        const result = await reviewDeviceMessageAction({
           text: trimmed,
           context:
             "这段文本准备发送到智能书包设备屏幕，请先生成适合儿童设备显示的简体中文短句。",
         })
 
+        if (!result.ok) {
+          setReviewError(result.message)
+          appendMessages({
+            id: `live-system-review-error-${Date.now()}`,
+            sender: "system",
+            text: `AI 评估失败：${result.message}。这只影响 bag-text 文案生成，不代表 IoT 命令下发链路故障。`,
+            time: nowTime(),
+            source: "live",
+          })
+          toast.error("AI 评估失败", {
+            description:
+              `${result.message}。下方 IoT 命令调试面板仍可在 MQTT connected 后直接发送 screen_text / mode_switch。`,
+          })
+          return
+        }
+
+        const review = result.review
+        setReviewError(null)
         setLastReview(review)
         setScreenText(review.screen_text)
 
@@ -149,8 +168,11 @@ export function InteractionSection() {
           })
         }
       } catch (error) {
+        const message = error instanceof Error ? error.message : "未知错误"
+        setReviewError(message)
         toast.error("消息评估失败", {
-          description: error instanceof Error ? error.message : "未知错误",
+          description:
+            `${message}。这只影响 AI 评估，IoT 命令调试面板仍可用于直发命令。`,
         })
       }
     })
@@ -230,8 +252,20 @@ export function InteractionSection() {
             <div className="flex flex-col gap-3">
               <div className="rounded-lg border border-dashed border-border bg-muted/20 p-2 text-[11px] leading-5 text-muted-foreground">
                 “AI 评估”只负责生成和检查屏显文案；“发送到设备”按钮只会在 MQTT 已连接且设备在线时开启，
-                点击后会真实调用 `publishCommand()` 把 `screen_text` 下发到 `v5/bag/cmd`。
+                点击后会真实调用 `publishCommand()` 把 `screen_text` 下发到 `v5/bag/cmd`。如果 AI 评估失败，
+                下方 IoT 命令调试面板仍可在 MQTT connected 后直接测试 `screen_text` / `mode_switch`。
               </div>
+
+              {reviewError ? (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-900">
+                  <div className="font-medium">AI 评估失败</div>
+                  <div className="mt-1">{reviewError}</div>
+                  <div className="mt-1">
+                    这只影响 bag-text 文案生成，不代表“发送到设备”或 MQTT 调试链路损坏。
+                    需要联调硬件时，可在下方 IoT 命令调试面板手动输入并发送 `screen_text`，或直接发送 `mode_switch`。
+                  </div>
+                </div>
+              ) : null}
 
               <ScrollArea className="h-64">
                 <div className="flex flex-col gap-3 pr-3">

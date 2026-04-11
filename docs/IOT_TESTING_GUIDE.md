@@ -91,6 +91,7 @@ ACK example:
 - `发送到设备` is enabled only when MQTT is connected and the device is online
 - Clicking `发送到设备` produces a real `v5/bag/cmd` command
 - `pendingCmd` appears before ACK and clears after matching ACK
+- If `AI 评估` fails because NewAPI or `bag-text` is unavailable, use the IoT debug panel to directly test `screen_text` / `mode_switch`
 
 ## 5. Deployment diagnostics
 
@@ -106,6 +107,7 @@ Use this to determine whether deployment wiring is correct:
 ```json
 {
   "started": true,
+  "starting": false,
   "redisConfigured": true,
   "mqttServerConfigured": true,
   "redisConnected": true,
@@ -138,6 +140,10 @@ This endpoint is for observability only. It does not hide broken deployments.
 - Upload snapshots to `POST /api/camera/latest`
 - Read snapshots from `GET /api/camera/latest`
 - Use this mode for remote environments where LAN streaming is not available
+- Upload header: `x-device-token: bag_secret_2026`
+- Upload body: `multipart/form-data`, field name `image`
+- Missing or wrong token returns `401` with `{ "success": false, "message": "Unauthorized Device" }`
+- No snapshot returns `200` with `{ "success": true, "hasSnapshot": false, "message": "暂无快照", "timestamp": null }`
 
 ## 8. Suggested validation sequence
 

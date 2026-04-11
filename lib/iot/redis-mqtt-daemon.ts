@@ -67,6 +67,7 @@ function updateDaemonStatus(patch: Partial<IoTDaemonStatus>) {
 function redactUrl(input: string) {
   try {
     const url = new URL(input)
+    if (url.username) url.username = '***'
     if (url.password) url.password = '***'
     return url.toString()
   } catch {
@@ -74,9 +75,25 @@ function redactUrl(input: string) {
   }
 }
 
+function sanitizeDiagnosticMessage(input: string) {
+  let output = input
+    .replace(/Bearer\s+[^\s"'`]+/gi, 'Bearer ***')
+    .replace(/sk-[A-Za-z0-9_-]+/g, 'sk-***')
+
+  const sensitiveValues = [process.env.REDIS_URL, process.env.MQTT_SERVER_URL].filter(
+    (value): value is string => Boolean(value)
+  )
+
+  for (const value of sensitiveValues) {
+    output = output.replaceAll(value, redactUrl(value))
+  }
+
+  return output
+}
+
 function getErrorMessage(error: unknown, prefix: string) {
   const message = error instanceof Error ? error.message : String(error)
-  return `${prefix}:${message}`
+  return sanitizeDiagnosticMessage(`${prefix}:${message}`)
 }
 
 export async function startRedisBackedMqttDaemon(): Promise<DaemonStartResult> {

@@ -5,12 +5,17 @@ export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
 export async function GET() {
-  await startRedisBackedMqttDaemon()
+  try {
+    await startRedisBackedMqttDaemon()
+  } catch (error) {
+    console.error('[IoT Daemon Status] Failed to start daemon before status read:', error)
+  }
 
   const status = getIoTDaemonStatus()
 
   return NextResponse.json({
     started: status.started,
+    starting: status.starting,
     redisConfigured: status.redisConfigured,
     mqttServerConfigured: status.mqttServerConfigured,
     redisConnected: status.redisConnected,

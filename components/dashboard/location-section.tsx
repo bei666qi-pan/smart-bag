@@ -74,7 +74,7 @@ export function LocationSection() {
     let resizeTimer: number | null = null
     const container = mapContainerRef.current
 
-    if (mapConfigError) {
+    if (mapConfigError || !key) {
       return
     }
 

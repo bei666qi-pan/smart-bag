@@ -8,6 +8,24 @@ import os from 'os'
 // Use /tmp for Docker-safe writable uploads
 const UPLOAD_DIR = path.join(os.tmpdir(), 'smart-bag-uploads')
 const LATEST_SNAPSHOT = path.join(UPLOAD_DIR, 'latest.jpg')
+const DEVICE_TOKEN = 'bag_secret_2026'
+
+function createEmptySnapshotResponse(message = '暂无快照') {
+  return NextResponse.json(
+    {
+      success: true,
+      hasSnapshot: false,
+      message,
+      timestamp: null,
+    },
+    {
+      status: 200,
+      headers: {
+        'Cache-Control': 'no-store, no-cache, must-revalidate',
+      },
+    }
+  )
+}
 
 // Ensure upload directory exists (best-effort, tolerant of read-only failures)
 async function ensureUploadDir() {
@@ -25,7 +43,7 @@ export async function POST(request: NextRequest) {
   try {
     // 设备静态令牌校验
     const deviceToken = request.headers.get('x-device-token')
-    if (deviceToken !== 'bag_secret_2026') {
+    if (deviceToken !== DEVICE_TOKEN) {
       return NextResponse.json(
         { success: false, message: 'Unauthorized Device' },
         { status: 401 }
@@ -69,10 +87,7 @@ export async function GET() {
     // Gracefully handle missing or unreadable snapshot file
     try {
       if (!existsSync(LATEST_SNAPSHOT)) {
-        return NextResponse.json(
-          { success: false, message: '暂无快照' },
-          { status: 404 }
-        )
+        return createEmptySnapshotResponse()
       }
 
       const buffer = await readFile(LATEST_SNAPSHOT)
@@ -85,10 +100,7 @@ export async function GET() {
       })
     } catch (innerError) {
       console.error('[Camera API] 快照读取失败:', innerError)
-      return NextResponse.json(
-        { success: false, message: '暂无快照' },
-        { status: 404 }
-      )
+      return createEmptySnapshotResponse('快照暂不可用')
     }
   } catch (error) {
     console.error('[Camera API] 读取错误:', error)

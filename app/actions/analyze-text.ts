@@ -4,6 +4,7 @@ import { z } from 'zod'
 import {
   chatCompletion,
   extractModelText,
+  NewAPIUserFacingError,
   parseModelJSON,
   type ChatMessage,
 } from '@/lib/newapi'
@@ -28,6 +29,18 @@ export type DeviceMessageReview = TextAnalysisOutput & {
   should_send: boolean
   decision_reason: string
 }
+
+export type DeviceMessageReviewActionResult =
+  | {
+      ok: true
+      review: DeviceMessageReview
+    }
+  | {
+      ok: false
+      message: string
+      canUseIotPanel: true
+      code?: string
+    }
 
 function buildBagTextMessages(input: TextAnalysisInput): ChatMessage[] {
   const normalizedTask = input.task?.trim()
@@ -88,8 +101,23 @@ export async function analyzeTextWithBagText(
     timeoutMs: 30_000,
   })
 
-  const raw = extractModelText(response)
-  const parsed = parseModelJSON<TextAnalysisOutput>(raw)
+  let raw = ''
+  let parsed: TextAnalysisOutput
+
+  try {
+    raw = extractModelText(response)
+    parsed = parseModelJSON<TextAnalysisOutput>(raw)
+  } catch (error) {
+    console.error('[bag-text] JSON 解析失败', {
+      message: error instanceof Error ? error.message : String(error),
+      raw: raw ? raw.slice(0, 500) : '',
+    })
+    throw new NewAPIUserFacingError(
+      'invalid_model_json',
+      'bag-text 返回内容不是可解析的 JSON，请稍后重试或联系维护人员检查模型输出格式',
+    )
+  }
+
   const validated = textAnalysisOutputSchema.safeParse(parsed)
 
   if (!validated.success) {
@@ -97,7 +125,10 @@ export async function analyzeTextWithBagText(
       issues: validated.error.issues,
       raw: raw.slice(0, 500),
     })
-    throw new Error('文本模型返回结构异常，请稍后重试')
+    throw new NewAPIUserFacingError(
+      'invalid_response',
+      'bag-text 返回 JSON 结构异常，请稍后重试或联系维护人员检查模型输出格式',
+    )
   }
 
   return validated.data
@@ -105,25 +136,59 @@ export async function analyzeTextWithBagText(
 
 export async function reviewDeviceMessageAction(
   input: TextAnalysisInput,
-): Promise<DeviceMessageReview> {
-  const originalText = input.text.trim()
-  const reviewed = await analyzeTextWithBagText({
-    text: originalText,
-    context: input.context,
-    task:
-      input.task ||
-      '请先润色成适合智能书包设备展示的中文提示，再判断是否适合直接下发到设备屏幕。',
-  })
+): Promise<DeviceMessageReviewActionResult> {
+  try {
+    const originalText = input.text.trim()
 
-  const shouldSend = reviewed.severity !== 'high'
-  const decisionReason = shouldSend
-    ? 'bag-text 判断该内容可直接用于设备展示'
-    : 'bag-text 判断该内容需要人工确认，已阻止自动下发'
+    if (!originalText) {
+      return {
+        ok: false,
+        message: '待评估文本不能为空',
+        canUseIotPanel: true,
+        code: 'empty_input',
+      }
+    }
 
-  return {
-    ...reviewed,
-    original_text: originalText,
-    should_send: shouldSend,
-    decision_reason: decisionReason,
+    const reviewed = await analyzeTextWithBagText({
+      text: originalText,
+      context: input.context,
+      task:
+        input.task ||
+        '请先润色成适合智能书包设备展示的中文提示，再判断是否适合直接下发到设备屏幕。',
+    })
+
+    const shouldSend = reviewed.severity !== 'high'
+    const decisionReason = shouldSend
+      ? 'bag-text 判断该内容可直接用于设备展示'
+      : 'bag-text 判断该内容需要人工确认，已阻止自动下发'
+
+    return {
+      ok: true,
+      review: {
+        ...reviewed,
+        original_text: originalText,
+        should_send: shouldSend,
+        decision_reason: decisionReason,
+      },
+    }
+  } catch (error) {
+    const message =
+      error instanceof Error
+        ? error.message
+        : 'AI 评估失败，请稍后重试'
+    const code =
+      error instanceof NewAPIUserFacingError ? error.code : 'unknown_error'
+
+    console.error('[bag-text] 设备消息评估失败', {
+      code,
+      message,
+    })
+
+    return {
+      ok: false,
+      message,
+      canUseIotPanel: true,
+      code,
+    }
   }
 }
