@@ -59,9 +59,11 @@ pnpm start
 
 - 下行 topic：`v5/bag/cmd`
 - ACK topic：`v5/bag/cmd/ack`
+- `AI 评估` 走 NewAPI 的 `bag-text`，当前代码不依赖 Coze。
+- `bag-text` 可能不支持 `response_format=json_object`；文本评估已关闭强制 `response_format`，改用提示词约束 JSON 输出并用 `parseModelJSON()` 解析。
 - 交互页里的“发送到设备”会真实调用 `publishCommand()` 下发 `screen_text`。
-- 如果 AI 评估失败，IoT 调试面板仍可直接下发 `screen_text` / `mode_switch` 做硬件联调。
-- 收到 ACK 后，调试面板和交互页状态都会更新。
+- 如果 AI 评估失败，可展开“高级调试与设备控制”直接下发 `screen_text` / `mode_switch` 做硬件联调。
+- 收到 ACK 后，交互页和高级控制区状态都会更新。
 
 ## 相关文档
 

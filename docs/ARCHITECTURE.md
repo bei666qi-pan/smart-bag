@@ -30,6 +30,11 @@ API
   /api/iot/state
   /api/iot/status   (alias of /api/iot/state)
   /api/iot/daemon-status
+
+AI
+  Server Actions
+  -> NewAPI /v1/chat/completions
+  -> models: bag-image, bag-text
 ```
 
 ## MQTT Responsibilities
@@ -76,7 +81,9 @@ This matters because page refreshes do not recover browser memory. Initial data 
 
 ### `/api/iot/state`
 
-Reads `bag:latest` from Redis and returns the last mirrored payload.
+Reads `bag:latest` from Redis and returns the last mirrored payload: `status`, `deviceOnline`, `battery`, `temp`, `humid`, `lat`, `lng`, and `lastSeenAt`.
+
+If Redis is missing, unavailable, or has no mirrored data yet, this route returns an offline empty state instead of pretending the device is online.
 
 ### `/api/iot/status`
 
@@ -127,7 +134,10 @@ These are intentionally shown as separate signals in the UI.
 ## Command Flow
 
 ```text
-User reviews text -> screen_text prepared
+User enters text
+-> AI 评估 calls bag-text through NewAPI
+-> screen_text prepared
+-> user confirms
 -> publish to v5/bag/cmd
 -> pendingCmd shown in UI
 -> hardware publishes v5/bag/cmd/ack
@@ -141,7 +151,15 @@ Command payload:
 ```
 
 The standard interaction flow is user input -> `AI 评估` with `bag-text` -> confirm `screen_text` -> `发送到设备`.
-If NewAPI or `bag-text` fails, the IoT debug panel can still publish `screen_text` and `mode_switch` directly for hardware validation.
+
+Important AI semantics:
+
+- The interaction page uses `bag-text`; it no longer depends on Coze.
+- `bag-text` may not support `response_format=json_object`. The current text flow disables forced `response_format` for `bag-text`, relies on the system prompt to require JSON, and then parses with `parseModelJSON()`.
+- `lib/newapi.ts` also supports a general retry path: when a model reports that `response_format=json_object` is unsupported, it retries once without `response_format`.
+- If NewAPI auth fails, NewAPI service fails, structured output is unsupported, or the model returns malformed JSON, the user sees a Simplified Chinese error instead of a raw upstream message.
+- If `AI 评估` fails, the user can expand `高级调试与设备控制` and directly publish `screen_text` or `mode_switch` for hardware validation.
+- The main `发送到设备` button stays disabled when there is no `screen_text`, the device is not online, the browser is not connected, or another command is still waiting for device confirmation.
 
 ACK payload:
 

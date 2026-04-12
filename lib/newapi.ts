@@ -10,7 +10,8 @@ export type ChatMessage = {
 export type ChatCompletionOptions = {
   temperature?: number
   max_tokens?: number
-  response_format?: { type: 'json_object' | 'text' }
+  response_format?: { type: 'json_object' | 'text' } | null
+  retryWithoutResponseFormat?: boolean
   timeoutMs?: number
 }
 
@@ -23,6 +24,7 @@ export type NewAPIErrorCode =
   | 'upstream_5xx'
   | 'upstream_http_error'
   | 'network_error'
+  | 'unsupported_response_format'
   | 'invalid_response'
   | 'empty_response'
   | 'invalid_model_json'
@@ -90,6 +92,51 @@ function toSafeLogDetail(detail: string) {
   return redactSecretLikeText(detail).slice(0, 500)
 }
 
+function isUnsupportedResponseFormatDetail(detail: string) {
+  const normalized = detail.toLowerCase()
+
+  return (
+    normalized.includes('response_format') &&
+    normalized.includes('json_object') &&
+    (normalized.includes('not supported') ||
+      normalized.includes('not support') ||
+      normalized.includes('unsupported') ||
+      normalized.includes('不支持'))
+  )
+}
+
+function buildChatCompletionBody(
+  model: string,
+  messages: ChatMessage[],
+  options: ChatCompletionOptions,
+  responseFormat: ChatCompletionOptions['response_format'],
+) {
+  const body: {
+    model: string
+    messages: ChatMessage[]
+    temperature?: number
+    max_tokens?: number
+    response_format?: { type: 'json_object' | 'text' }
+  } = {
+    model,
+    messages,
+  }
+
+  if (typeof options.temperature === 'number') {
+    body.temperature = options.temperature
+  }
+
+  if (typeof options.max_tokens === 'number') {
+    body.max_tokens = options.max_tokens
+  }
+
+  if (responseFormat) {
+    body.response_format = responseFormat
+  }
+
+  return body
+}
+
 function normalizeBaseUrl(input: string) {
   const trimmed = input.trim().replace(/\/+$/, '')
 
@@ -148,6 +195,14 @@ function readChoiceContent(choice: ChatChoice | undefined) {
 }
 
 function toUserFacingError(status: number, fallback?: string) {
+  if (fallback && isUnsupportedResponseFormatDetail(fallback)) {
+    return new NewAPIUserFacingError(
+      'unsupported_response_format',
+      '当前模型不支持 response_format=json_object 结构化输出，请关闭结构化输出参数，改用提示词约束 JSON 输出',
+      status,
+    )
+  }
+
   if (status === 401 || status === 403) {
     return new NewAPIUserFacingError(
       'auth_failed',
@@ -182,7 +237,7 @@ function toUserFacingError(status: number, fallback?: string) {
 
   return new NewAPIUserFacingError(
     'upstream_http_error',
-    fallback || `NewAPI 调用失败：HTTP ${status}`,
+    `NewAPI 调用失败：上游返回 HTTP ${status}，请检查模型服务配置或稍后重试`,
     status,
   )
 }
@@ -204,82 +259,118 @@ export async function chatCompletion(
     )
   }
 
-  const controller = new AbortController()
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS
-  const timer = setTimeout(() => controller.abort(), timeoutMs)
+  const retryWithoutResponseFormat =
+    options.retryWithoutResponseFormat !== false &&
+    options.response_format?.type === 'json_object'
 
-  try {
-    const response = await fetch(endpoint, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model,
-        messages,
-        temperature: options.temperature,
-        max_tokens: options.max_tokens,
-        response_format: options.response_format,
-      }),
-      signal: controller.signal,
-    })
+  const sendRequest = async (
+    responseFormat: ChatCompletionOptions['response_format'],
+    attempt: 'primary' | 'retry_without_response_format',
+  ) => {
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), timeoutMs)
 
-    if (!response.ok) {
-      let fallback = ''
+    try {
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify(
+          buildChatCompletionBody(model, messages, options, responseFormat),
+        ),
+        signal: controller.signal,
+      })
 
-      try {
-        const rawBody = await response.text()
+      if (!response.ok) {
+        let fallback = ''
+
         try {
-          const body = rawBody ? (JSON.parse(rawBody) as NewAPIResponse) : null
-          fallback = body?.error?.message || rawBody
+          const rawBody = await response.text()
+          try {
+            const body = rawBody ? (JSON.parse(rawBody) as NewAPIResponse) : null
+            fallback = body?.error?.message || rawBody
+          } catch {
+            fallback = rawBody
+          }
         } catch {
-          fallback = rawBody
+          fallback = ''
         }
-      } catch {
-        fallback = ''
+
+        const unsupportedResponseFormat =
+          responseFormat?.type === 'json_object' &&
+          isUnsupportedResponseFormatDetail(fallback)
+
+        console.error('[NewAPI] 请求失败', {
+          model,
+          status: response.status,
+          endpoint: redactUrl(endpoint),
+          attempt,
+          responseFormat: responseFormat?.type ?? 'none',
+          unsupportedResponseFormat,
+          detail: toSafeLogDetail(fallback),
+        })
+
+        throw toUserFacingError(response.status, fallback)
       }
 
-      console.error('[NewAPI] 请求失败', {
-        model,
-        status: response.status,
-        endpoint: redactUrl(endpoint),
-        detail: toSafeLogDetail(fallback),
-      })
+      let data: NewAPIResponse
+      try {
+        data = (await response.json()) as NewAPIResponse
+      } catch (error) {
+        console.error('[NewAPI] 响应不是有效 JSON', {
+          model,
+          endpoint: redactUrl(endpoint),
+          attempt,
+          message: error instanceof Error ? error.message : String(error),
+        })
+        throw new NewAPIUserFacingError(
+          'invalid_response',
+          'NewAPI 服务返回内容异常：响应不是有效 JSON，无法完成分析',
+        )
+      }
 
-      throw toUserFacingError(response.status, fallback)
+      const content = readChoiceContent(data.choices?.[0])
+
+      if (!content) {
+        console.error('[NewAPI] 空响应内容', {
+          model,
+          endpoint: redactUrl(endpoint),
+          attempt,
+          response: toSafeLogDetail(JSON.stringify(data)),
+        })
+        throw new NewAPIUserFacingError(
+          'empty_response',
+          'NewAPI 服务返回了空内容，暂时无法完成分析',
+        )
+      }
+
+      return data
+    } finally {
+      clearTimeout(timer)
     }
+  }
 
-    let data: NewAPIResponse
+  try {
     try {
-      data = (await response.json()) as NewAPIResponse
+      return await sendRequest(options.response_format, 'primary')
     } catch (error) {
-      console.error('[NewAPI] 响应不是有效 JSON', {
-        model,
-        endpoint: redactUrl(endpoint),
-        message: error instanceof Error ? error.message : String(error),
-      })
-      throw new NewAPIUserFacingError(
-        'invalid_response',
-        'NewAPI 返回内容不是有效 JSON，无法完成分析',
-      )
+      if (
+        retryWithoutResponseFormat &&
+        error instanceof NewAPIUserFacingError &&
+        error.code === 'unsupported_response_format'
+      ) {
+        console.warn('[NewAPI] 模型不支持结构化输出，去掉 response_format 后重试', {
+          model,
+          endpoint: redactUrl(endpoint),
+        })
+        return await sendRequest(null, 'retry_without_response_format')
+      }
+
+      throw error
     }
-
-    const content = readChoiceContent(data.choices?.[0])
-
-    if (!content) {
-      console.error('[NewAPI] 空响应内容', {
-        model,
-        endpoint: redactUrl(endpoint),
-        response: toSafeLogDetail(JSON.stringify(data)),
-      })
-      throw new NewAPIUserFacingError(
-        'empty_response',
-        'NewAPI 返回了空内容，暂时无法完成分析',
-      )
-    }
-
-    return data
   } catch (error) {
     if (isNewAPIUserFacingError(error)) {
       throw error
@@ -302,8 +393,6 @@ export async function chatCompletion(
       'network_error',
       'NewAPI 请求失败：无法连接上游服务，请检查 NEWAPI_BASE_URL 和网络连通性',
     )
-  } finally {
-    clearTimeout(timer)
   }
 }
 

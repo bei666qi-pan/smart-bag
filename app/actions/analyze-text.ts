@@ -97,7 +97,7 @@ export async function analyzeTextWithBagText(
   const response = await chatCompletion('bag-text', buildBagTextMessages(input), {
     temperature: 0.3,
     max_tokens: 512,
-    response_format: { type: 'json_object' },
+    response_format: null,
     timeoutMs: 30_000,
   })
 
@@ -114,7 +114,7 @@ export async function analyzeTextWithBagText(
     })
     throw new NewAPIUserFacingError(
       'invalid_model_json',
-      'bag-text 返回内容不是可解析的 JSON，请稍后重试或联系维护人员检查模型输出格式',
+      'AI 返回格式异常：模型没有返回可解析的 JSON，请稍后重试，或展开“高级调试与设备控制”手动发送文本',
     )
   }
 
@@ -126,8 +126,8 @@ export async function analyzeTextWithBagText(
       raw: raw.slice(0, 500),
     })
     throw new NewAPIUserFacingError(
-      'invalid_response',
-      'bag-text 返回 JSON 结构异常，请稍后重试或联系维护人员检查模型输出格式',
+      'invalid_model_json',
+      'AI 返回格式异常：模型返回的字段不完整或不符合要求，请稍后重试，或展开“高级调试与设备控制”手动发送文本',
     )
   }
 
@@ -159,8 +159,8 @@ export async function reviewDeviceMessageAction(
 
     const shouldSend = reviewed.severity !== 'high'
     const decisionReason = shouldSend
-      ? 'bag-text 判断该内容可直接用于设备展示'
-      : 'bag-text 判断该内容需要人工确认，已阻止自动下发'
+      ? 'AI 判断该内容可用于设备展示'
+      : 'AI 建议先人工确认，已阻止自动下发'
 
     return {
       ok: true,

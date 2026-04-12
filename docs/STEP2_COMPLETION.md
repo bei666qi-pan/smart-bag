@@ -1,5 +1,7 @@
 # ✅ Step 2 完成总结 - IoT 核心逻辑集成
 
+> 历史归档说明：本文是早期阶段性总结，不再作为当前联调或上线依据。当前真实行为请以 `docs/ARCHITECTURE.md`、`docs/IOT_TESTING_GUIDE.md` 和根目录 `软硬件对接文档.md` 为准；例如当前定位页使用 AMap 而不是 Mapbox，交互页 `AI 评估` 使用 `bag-text` 且已兼容 `response_format=json_object` 不被模型支持的情况，Camera WAN 上传需要 `x-device-token: bag_secret_2026` 和 `image` 字段。
+
 ## 🎯 任务完成度: 100%
 
 ---

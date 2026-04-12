@@ -1,15 +1,17 @@
-# IoT Testing Guide
+# IoT 联调指南
 
-## 1. MQTT addresses
+本文档按当前仓库真实代码编写，适用于 Smart Schoolbag V5.0 的软硬件联调、AI 评估排障和 Camera WAN 快照测试。
 
-- Hardware MQTT (TCP): `mqtt.bag.versecraft.cn:1883`
-- Browser MQTT (WSS): `wss://bag.versecraft.cn/mqtt`
+## 1. MQTT 地址
 
-Only the browser should use the WSS address. Hardware must connect to the TCP broker.
+- 硬件 MQTT（TCP）：`mqtt.bag.versecraft.cn:1883`
+- 浏览器 MQTT（WSS）：`wss://bag.versecraft.cn/mqtt`
 
-## 2. Local broker setup
+硬件只连接 TCP 地址；浏览器页面只使用 WSS 地址。不要把 `wss://.../mqtt` 交给 ESP32 或其他硬件客户端。
 
-Example Mosquitto config:
+## 2. 本地 Broker 示例
+
+Mosquitto 配置示例：
 
 ```conf
 listener 1883
@@ -18,7 +20,7 @@ protocol websockets
 allow_anonymous true
 ```
 
-Local browser env example:
+本地环境变量示例：
 
 ```bash
 NEXT_PUBLIC_MQTT_URL=ws://localhost:8083/mqtt
@@ -27,82 +29,99 @@ MQTT_SERVER_URL=mqtt://localhost:1883
 REDIS_URL=redis://localhost:6379
 ```
 
-## 3. Publish test data
+## 3. 测试数据发布
 
-### Device online/offline
+### 设备在线 / 离线
 
 ```bash
 mosquitto_pub -h localhost -t "v5/bag/status" -m '{"status":"online"}'
 mosquitto_pub -h localhost -t "v5/bag/status" -m '{"status":"offline"}'
 ```
 
-### Sensor data
+### 传感器数据
 
 ```bash
 mosquitto_pub -h localhost -t "v5/bag/sensors" -m '{"battery":75,"temp":26,"humid":50}'
 ```
 
-### GPS data
+### GPS 数据
 
 ```bash
 mosquitto_pub -h localhost -t "v5/bag/gps" -m '{"lat":31.2304,"lng":121.4737}'
 mosquitto_pub -h localhost -t "v5/bag/gps" -m '{"lat":31.2310,"lng":121.4740}'
 ```
 
-### Command ACK
+### 下行命令与设备回执
 
-Command topic:
+下行命令 topic：
 
 ```text
 v5/bag/cmd
 ```
 
-ACK topic:
+设备回执 topic：
 
 ```text
 v5/bag/cmd/ack
 ```
 
-ACK example:
+命令示例：
 
 ```json
-{"cmd_id":"abc-123","status":0,"msg":"OK"}
+{ "id": "uuid", "action": "screen_text", "value": "记得带作业本" }
 ```
 
-## 4. What to verify in the UI
+也支持：
 
-### Dashboard
+```json
+{ "id": "uuid", "action": "mode_switch", "value": "focus_mode" }
+```
 
-- MQTT status reflects broker connectivity
-- Device status reflects `v5/bag/status`
-- Sensor cards show real values or `—`
-- No fake CPU / memory / bag item placeholders remain
+回执示例：
 
-### Location page
+```json
+{ "cmd_id": "uuid", "status": 0, "msg": "OK" }
+```
 
-- Coordinate text updates when `gpsCoords` changes
-- Marker moves to the new point
-- Map center follows the latest point
-- No repeated 500ms resize heartbeat logs
+前端会用 `cmd_id` 匹配正在等待设备确认的命令，匹配后更新最近设备回执。
 
-### Interaction page
+## 4. UI 验证
 
-- `AI 评估` only prepares/reviews `screen_text`
-- `发送到设备` is enabled only when MQTT is connected and the device is online
-- Clicking `发送到设备` produces a real `v5/bag/cmd` command
-- `pendingCmd` appears before ACK and clears after matching ACK
-- If `AI 评估` fails because NewAPI or `bag-text` is unavailable, use the IoT debug panel to directly test `screen_text` / `mode_switch`
+### 仪表盘
 
-## 5. Deployment diagnostics
+- 连接状态只表示浏览器是否连上 Broker。
+- 设备状态只以 `v5/bag/status` 为准。
+- 传感器卡片显示真实数值或空态，不再用假 CPU / memory / bag item 占位。
+
+### 位置页
+
+- 坐标文本跟随 `gpsCoords`。
+- Marker 跟随最新坐标移动。
+- 地图中心跟随最新坐标移动。
+
+### 交互页
+
+- 标准流程：输入原始消息 -> `AI 评估` -> 生成适合设备屏幕显示的短文本 -> 用户确认 -> `发送到设备`。
+- `AI 评估` 实际调用服务端 `bag-text`，依赖 `NEWAPI_BASE_URL` / `NEWAPI_API_KEY`。
+- 当前代码不再依赖 Coze。
+- `bag-text` 可能不支持 `response_format=json_object`。代码已对 `bag-text` 关闭强制 `response_format`，改用 system prompt 约束 JSON 输出，再用 `parseModelJSON()` 解析；`lib/newapi.ts` 也能在模型报“不支持 json_object”时去掉 `response_format` 重试一次。
+- `发送到设备` 只有在连接已建立、设备在线、有可发送短文本且没有等待确认的命令时才会开启。
+- 如果 `AI 评估` 失败，页面会在按钮附近提示“AI 暂时不可用”。这不代表设备通信链路损坏。
+- AI 失败后，可展开 `高级调试与设备控制`，直接发送 `screen_text` 或 `mode_switch` 做硬件联调。
+
+## 5. 部署诊断接口
+
+### `/api/iot/state`
+
+读取 Redis 中 `bag:latest` 的最新镜像值，并返回状态、传感器、GPS 和 `lastSeenAt`。如果 Redis 未配置或不可用，会返回离线空态和 `error` 字段，不会伪装成设备在线。
 
 ### `/api/iot/status`
 
-- Alias of `/api/iot/state`
-- Reads the last mirrored snapshot from Redis
+`/api/iot/state` 的别名，便于旧调用路径继续工作。
 
 ### `/api/iot/daemon-status`
 
-Use this to determine whether deployment wiring is correct:
+只读诊断接口，用来判断服务端守护进程是否启动、Redis/MQTT 是否配置并连接、是否订阅 `v5/bag/#`：
 
 ```json
 {
@@ -119,36 +138,41 @@ Use this to determine whether deployment wiring is correct:
 }
 ```
 
-This endpoint is for observability only. It does not hide broken deployments.
+这个接口用于观测部署状态，不会泄露 Redis URL、MQTT URL、API key 或 token。
 
-## 6. Important semantics
+## 6. 重要语义
 
-- `Broker 在线 != 设备在线`
-- Page refresh depends on Redis/API initial state, not on the browser remembering previous MQTT data
-- If Redis or the daemon is missing, `/api/iot/status` falls back to empty data instead of pretending the device is online
+- `Broker 在线 != 设备在线`。
+- 页面刷新后的初始状态来自 Redis/API，不来自浏览器内存。
+- 浏览器 MQTT 已连接，只说明浏览器连上了 Broker。
+- `/api/iot/status` 缺数据时，优先检查 Redis 和服务端 daemon，不要直接判定前端订阅坏了。
 
-## 7. Video testing
+## 7. 视频与 Camera WAN 测试
 
-### LAN mode
+### LAN 模式
 
-- Only suitable for same-LAN testing
-- Uses `NEXT_PUBLIC_ESP32_STREAM_URL`
-- If the page is HTTPS and the stream is HTTP, the browser will block it as Mixed Content
+- 使用 `NEXT_PUBLIC_ESP32_STREAM_URL`。
+- 只适合同网段联调。
+- HTTPS 页面如果读取 HTTP 视频流，会被浏览器按 Mixed Content 拦截。
+- 生产公网环境不建议直接依赖局域网地址。
 
-### WAN mode
+### WAN 快照模式
 
-- Upload snapshots to `POST /api/camera/latest`
-- Read snapshots from `GET /api/camera/latest`
-- Use this mode for remote environments where LAN streaming is not available
-- Upload header: `x-device-token: bag_secret_2026`
-- Upload body: `multipart/form-data`, field name `image`
-- Missing or wrong token returns `401` with `{ "success": false, "message": "Unauthorized Device" }`
-- No snapshot returns `200` with `{ "success": true, "hasSnapshot": false, "message": "暂无快照", "timestamp": null }`
+- 设备上传快照：`POST /api/camera/latest`
+- 浏览器读取快照：`GET /api/camera/latest`
+- 适合远程环境或无法直连 ESP32 局域网视频流的场景。
+- 上传 Header：`x-device-token: bag_secret_2026`
+- `bag_secret_2026` 是当前代码默认设备令牌。
+- 上传 Body：`multipart/form-data`，字段名必须是 `image`。
+- 缺少或错误 token 返回 `401` 和 `{ "success": false, "message": "Unauthorized Device" }`。
+- 暂无快照返回 `200` 和 `{ "success": true, "hasSnapshot": false, "message": "暂无快照", "timestamp": null }`。
 
-## 8. Suggested validation sequence
+## 8. 建议验证顺序
 
-1. Confirm `/api/iot/daemon-status` shows `started=true` and `subscribed=true`
-2. Publish `v5/bag/status` and confirm the UI switches device status
-3. Publish `v5/bag/sensors` and confirm dashboard cards update
-4. Publish `v5/bag/gps` and confirm the location page center, marker, and coordinate text all move
-5. Use the interaction page to send `screen_text`, then publish an ACK and confirm `pendingCmd` clears
+1. 打开 `/api/iot/daemon-status`，确认 `started=true` 且 `subscribed=true`。
+2. 发布 `v5/bag/status`，确认 UI 设备状态变化。
+3. 发布 `v5/bag/sensors`，确认仪表盘卡片更新。
+4. 发布 `v5/bag/gps`，确认位置页坐标、marker 和地图中心更新。
+5. 在交互页输入消息，点击 `AI 评估`，确认能生成设备屏幕短文本；如果 AI 失败，展开 `高级调试与设备控制` 手动输入并发送。
+6. 发送 `screen_text` 后，发布 `v5/bag/cmd/ack`，确认等待确认状态清空，最近设备回执更新。
+7. 测试 Camera WAN：用 `x-device-token: bag_secret_2026` 和 `image` 字段 POST 图片到 `/api/camera/latest`，再用 GET 拉取最新快照。

@@ -8,11 +8,17 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible"
 import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
 import { useIoTStore } from "@/store/useIoTStore"
 import {
+  ChevronDown,
   Focus,
   Loader2,
   MessageCircle,
@@ -54,6 +60,36 @@ function nowTime() {
   })
 }
 
+function getConnectionStatusText(status: string) {
+  if (status === "connected") return "已连接"
+  if (status === "connecting") return "连接中"
+  if (status === "error") return "连接异常"
+  return "未连接"
+}
+
+function getDataSyncStatusText(status: string) {
+  if (status === "loading") return "同步中"
+  if (status === "success") return "已同步"
+  if (status === "error") return "同步失败"
+  return "待同步"
+}
+
+function getCommandLabel(action: "mode_switch" | "screen_text", value: string) {
+  if (action === "screen_text") {
+    return `屏幕文字：${value}`
+  }
+
+  if (value === "focus_mode") {
+    return "切换为专注模式"
+  }
+
+  if (value === "normal_mode") {
+    return "切换为普通模式"
+  }
+
+  return `模式切换：${value}`
+}
+
 export function InteractionSection() {
   const [messages, setMessages] = useState(initialMessages)
   const [draftMessage, setDraftMessage] = useState("")
@@ -62,6 +98,7 @@ export function InteractionSection() {
   const [focusRemainingSeconds, setFocusRemainingSeconds] = useState(25 * 60)
   const [isFocusRunning, setIsFocusRunning] = useState(false)
   const [screenText, setScreenText] = useState("")
+  const [isAdvancedOpen, setIsAdvancedOpen] = useState(false)
   const [isReviewPending, startReviewTransition] = useTransition()
 
   const mqttConnectionStatus = useIoTStore((state) => state.mqttConnectionStatus)
@@ -112,6 +149,10 @@ export function InteractionSection() {
       return
     }
 
+    setReviewError(null)
+    setLastReview(null)
+    setScreenText("")
+
     startReviewTransition(async () => {
       try {
         const result = await reviewDeviceMessageAction({
@@ -125,13 +166,13 @@ export function InteractionSection() {
           appendMessages({
             id: `live-system-review-error-${Date.now()}`,
             sender: "system",
-            text: `AI 评估失败：${result.message}。这只影响 bag-text 文案生成，不代表 IoT 命令下发链路故障。`,
+            text: `AI 评估暂时不可用：${result.message}。你仍可展开“高级调试与设备控制”，手动输入要显示在设备上的短文本后发送。`,
             time: nowTime(),
             source: "live",
           })
-          toast.error("AI 评估失败", {
+          toast.error("AI 暂时不可用，请稍后重试", {
             description:
-              `${result.message}。下方 IoT 命令调试面板仍可在 MQTT connected 后直接发送 screen_text / mode_switch。`,
+              "需要继续联调时，可展开“高级调试与设备控制”手动发送屏幕文字。",
           })
           return
         }
@@ -160,7 +201,7 @@ export function InteractionSection() {
 
         if (review.should_send) {
           toast.success("AI 评估完成", {
-            description: "已生成可发送的 screen_text，请确认后发送到设备。",
+            description: "已生成适合设备屏幕显示的短文本，请确认后发送。",
           })
         } else {
           toast.warning("AI 建议先人工确认", {
@@ -170,9 +211,9 @@ export function InteractionSection() {
       } catch (error) {
         const message = error instanceof Error ? error.message : "未知错误"
         setReviewError(message)
-        toast.error("消息评估失败", {
+        toast.error("AI 暂时不可用，请稍后重试", {
           description:
-            `${message}。这只影响 AI 评估，IoT 命令调试面板仍可用于直发命令。`,
+            "需要继续联调时，可展开“高级调试与设备控制”手动发送屏幕文字。",
         })
       }
     })
@@ -181,14 +222,14 @@ export function InteractionSection() {
   const handlePublishScreenText = (value: string) => {
     const trimmed = value.trim()
     if (!trimmed) {
-      toast.warning("当前没有可发送的 screen_text")
+      toast.warning("当前没有可发送的屏幕文字")
       return
     }
 
     const result = publishCommand("screen_text", trimmed)
     if (!result.ok) {
-      toast.error("命令下发失败", {
-        description: result.error || "未知错误",
+      toast.error("发送失败", {
+        description: result.error || "设备连接暂时不可用",
       })
       return
     }
@@ -196,12 +237,12 @@ export function InteractionSection() {
     appendMessages({
       id: `live-system-send-${Date.now()}`,
       sender: "system",
-      text: `已真实下发 screen_text，等待设备 ACK：${trimmed}`,
+      text: `已发送到设备，等待设备确认：${trimmed}`,
       time: nowTime(),
       source: "live",
     })
 
-    toast.success("已发送到 v5/bag/cmd", {
+    toast.success("已发送到设备", {
       description: trimmed,
     })
   }
@@ -209,14 +250,14 @@ export function InteractionSection() {
   const handleQuickCommand = (action: "mode_switch" | "screen_text", value: string) => {
     const result = publishCommand(action, value)
     if (!result.ok) {
-      toast.error("命令下发失败", {
-        description: result.error || "未知错误",
+      toast.error("发送失败", {
+        description: result.error || "设备连接暂时不可用",
       })
       return
     }
 
-    toast.success("命令已下发", {
-      description: `${action}: ${value}`,
+    toast.success("已发送到设备", {
+      description: getCommandLabel(action, value),
     })
   }
 
@@ -227,6 +268,18 @@ export function InteractionSection() {
     deviceOnline &&
     screenText.trim().length > 0 &&
     !pendingCmd
+  const screenTextPreview = screenText.trim()
+  const sendButtonHint = pendingCmd
+    ? "上一条消息正在等待设备确认，请稍候。"
+    : !screenTextPreview && reviewError
+      ? "AI 暂时不可用，尚未生成可发送内容。可展开下方高级控制手动输入。"
+      : !screenTextPreview
+        ? "先输入消息并完成 AI 评估，生成适合设备显示的短文本。"
+        : mqttConnectionStatus !== "connected"
+          ? "连接未建立，暂时无法发送。"
+          : !deviceOnline
+            ? "设备未连接，暂时无法发送。"
+            : `准备发送：${screenTextPreview}`
 
   return (
     <div className="flex flex-col gap-4">
@@ -244,28 +297,16 @@ export function InteractionSection() {
                 消息
               </CardTitle>
               <Badge variant="outline" className="text-[10px]">
-                真实发送走 v5/bag/cmd
+                设备屏幕消息
               </Badge>
             </div>
           </CardHeader>
           <CardContent>
             <div className="flex flex-col gap-3">
               <div className="rounded-lg border border-dashed border-border bg-muted/20 p-2 text-[11px] leading-5 text-muted-foreground">
-                “AI 评估”只负责生成和检查屏显文案；“发送到设备”按钮只会在 MQTT 已连接且设备在线时开启，
-                点击后会真实调用 `publishCommand()` 把 `screen_text` 下发到 `v5/bag/cmd`。如果 AI 评估失败，
-                下方 IoT 命令调试面板仍可在 MQTT connected 后直接测试 `screen_text` / `mode_switch`。
+                先输入想显示在书包屏幕上的原始消息，AI 会帮你整理成更短、更适合设备展示的文字。
+                确认无误后，再点击“发送到设备”。
               </div>
-
-              {reviewError ? (
-                <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-900">
-                  <div className="font-medium">AI 评估失败</div>
-                  <div className="mt-1">{reviewError}</div>
-                  <div className="mt-1">
-                    这只影响 bag-text 文案生成，不代表“发送到设备”或 MQTT 调试链路损坏。
-                    需要联调硬件时，可在下方 IoT 命令调试面板手动输入并发送 `screen_text`，或直接发送 `mode_switch`。
-                  </div>
-                </div>
-              ) : null}
 
               <ScrollArea className="h-64">
                 <div className="flex flex-col gap-3 pr-3">
@@ -325,43 +366,29 @@ export function InteractionSection() {
               {lastReview ? (
                 <div className="rounded-lg border border-border bg-muted/30 p-3">
                   <div className="mb-2 flex items-center justify-between gap-3">
-                    <div className="text-sm font-medium text-foreground">最近一次 bag-text 评估</div>
+                    <div className="text-sm font-medium text-foreground">最近一次 AI 建议</div>
                     <Badge variant={lastReview.should_send ? "secondary" : "destructive"}>
-                      {lastReview.should_send ? "建议可直发" : "需人工确认"}
+                      {lastReview.should_send ? "建议可发送" : "请先确认"}
                     </Badge>
                   </div>
                   <div className="grid gap-2 text-xs text-muted-foreground sm:grid-cols-2">
                     <div className="rounded-md border border-border bg-background p-2">
-                      <div className="text-[10px] uppercase tracking-wide">原始文本</div>
+                      <div className="text-[10px] text-muted-foreground">原始消息</div>
                       <div className="mt-1 text-foreground">{lastReview.original_text}</div>
                     </div>
                     <div className="rounded-md border border-border bg-background p-2">
-                      <div className="text-[10px] uppercase tracking-wide">建议下发</div>
+                      <div className="text-[10px] text-muted-foreground">建议显示</div>
                       <div className="mt-1 text-foreground">{lastReview.screen_text}</div>
                     </div>
                     <div className="rounded-md border border-border bg-background p-2">
-                      <div className="text-[10px] uppercase tracking-wide">分析结论</div>
+                      <div className="text-[10px] text-muted-foreground">分析结论</div>
                       <div className="mt-1 text-foreground">{lastReview.analysis}</div>
                     </div>
                     <div className="rounded-md border border-border bg-background p-2">
-                      <div className="text-[10px] uppercase tracking-wide">处理建议</div>
+                      <div className="text-[10px] text-muted-foreground">处理建议</div>
                       <div className="mt-1 text-foreground">{lastReview.suggestion}</div>
                     </div>
                   </div>
-                </div>
-              ) : null}
-
-              {lastCmdAck ? (
-                <div
-                  className={`rounded-lg border p-3 text-xs ${
-                    lastCmdAck.status === 0
-                      ? "border-emerald-200 bg-emerald-50 text-emerald-800"
-                      : "border-rose-200 bg-rose-50 text-rose-800"
-                  }`}
-                >
-                  最近设备 ACK：{lastCmdAck.status === 0 ? "成功" : "失败"} {lastCmdAck.cmd_id}
-                  {lastCmdAck.msg ? `，${lastCmdAck.msg}` : ""}
-                  {lastCmdAck.ts ? `，${lastCmdAck.ts}` : ""}
                 </div>
               ) : null}
 
@@ -400,6 +427,26 @@ export function InteractionSection() {
                     发送到设备
                   </Button>
                 </div>
+                <p className="text-xs leading-5 text-muted-foreground">{sendButtonHint}</p>
+
+                {reviewError ? (
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-900">
+                    <div className="font-medium">AI 暂时不可用，请稍后重试</div>
+                    <div className="mt-1">原因：{reviewError}</div>
+                    <div className="mt-1">
+                      需要继续联调设备时，可以展开“高级调试与设备控制”，手动输入要显示在设备上的短文本后发送。
+                    </div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="mt-2 h-8 bg-white/70"
+                      onClick={() => setIsAdvancedOpen(true)}
+                    >
+                      展开高级控制
+                    </Button>
+                  </div>
+                ) : null}
               </div>
             </div>
           </CardContent>
@@ -454,130 +501,164 @@ export function InteractionSection() {
       </div>
 
       <Card className="border-border bg-card">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-sm font-medium text-foreground">IoT 命令调试面板</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-col gap-3">
-            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-              <div className="rounded-lg border border-border bg-muted/20 p-2">
-                <div className="text-[10px] text-muted-foreground">MQTT Broker</div>
-                <div className="mt-0.5 font-mono text-xs text-foreground">
-                  {mqttConnectionStatus}
+        <Collapsible open={isAdvancedOpen} onOpenChange={setIsAdvancedOpen}>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex flex-col gap-1">
+                <CardTitle className="text-sm font-medium text-foreground">
+                  高级调试与设备控制
+                </CardTitle>
+                <p className="text-xs text-muted-foreground">
+                  硬件联调、手动发送和设备回执记录。
+                </p>
+              </div>
+              <CollapsibleTrigger asChild>
+                <Button type="button" variant="outline" size="sm" className="gap-2">
+                  {isAdvancedOpen ? "收起" : "展开"}
+                  <ChevronDown
+                    className={`h-4 w-4 transition-transform ${
+                      isAdvancedOpen ? "rotate-180" : ""
+                    }`}
+                  />
+                </Button>
+              </CollapsibleTrigger>
+            </div>
+          </CardHeader>
+
+          <CollapsibleContent>
+            <CardContent>
+              <div className="flex flex-col gap-3">
+                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                  <div className="rounded-lg border border-border bg-muted/20 p-2">
+                    <div className="text-[10px] text-muted-foreground">连接状态</div>
+                    <div className="mt-0.5 text-xs font-medium text-foreground">
+                      {getConnectionStatusText(mqttConnectionStatus)}
+                    </div>
+                  </div>
+                  <div className="rounded-lg border border-border bg-muted/20 p-2">
+                    <div className="text-[10px] text-muted-foreground">设备状态</div>
+                    <div className="mt-0.5 text-xs font-medium text-foreground">
+                      {deviceOnline ? "在线" : "未连接"}
+                    </div>
+                  </div>
+                  <div className="rounded-lg border border-border bg-muted/20 p-2">
+                    <div className="text-[10px] text-muted-foreground">数据同步</div>
+                    <div className="mt-0.5 text-xs font-medium text-foreground">
+                      {getDataSyncStatusText(iotApiFetchStatus)}
+                    </div>
+                  </div>
                 </div>
-              </div>
-              <div className="rounded-lg border border-border bg-muted/20 p-2">
-                <div className="text-[10px] text-muted-foreground">设备状态</div>
-                <div className="mt-0.5 text-xs font-medium text-foreground">
-                  {deviceOnline ? "在线" : "离线"}
+
+                <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                  <span>最后在线：{lastSeenAt ?? "暂无"}</span>
+                  <Separator orientation="vertical" className="h-4" />
+                  <span>
+                    等待设备确认：{pendingCmd ? pendingCmd.cmd_id : "暂无"}
+                  </span>
+                  <Separator orientation="vertical" className="h-4" />
+                  <span>
+                    最近设备回执：
+                    {lastCmdAck
+                      ? `${lastCmdAck.status === 0 ? "成功" : "失败"} ${lastCmdAck.cmd_id}${
+                          lastCmdAck.ts ? ` @ ${lastCmdAck.ts}` : ""
+                        }`
+                      : "暂无"}
+                  </span>
                 </div>
-              </div>
-              <div className="rounded-lg border border-border bg-muted/20 p-2">
-                <div className="text-[10px] text-muted-foreground">API 初始化</div>
-                <div className="mt-0.5 font-mono text-xs text-foreground">
-                  {iotApiFetchStatus}
+
+                {cmdError ? (
+                  <div className="rounded-md border border-rose-200 bg-rose-50 p-2 text-xs text-rose-700">
+                    发送失败：{cmdError}
+                  </div>
+                ) : null}
+
+                {mqttConnectionStatus !== "connected" ? (
+                  <div className="rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">
+                    连接尚未建立，高级控制暂时不能发送。请先检查设备通信连接。
+                  </div>
+                ) : null}
+
+                {mqttConnectionStatus === "connected" && !deviceOnline ? (
+                  <div className="rounded-md border border-sky-200 bg-sky-50 p-2 text-xs text-sky-800">
+                    通信连接已建立，但设备还没有上报在线。高级控制仍可用于联调，正式发送建议等设备上线。
+                  </div>
+                ) : null}
+
+                <div className="flex flex-col gap-2">
+                  <div className="text-sm font-medium text-foreground">模式切换</div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleQuickCommand("mode_switch", "focus_mode")}
+                      disabled={mqttConnectionStatus !== "connected"}
+                    >
+                      进入专注模式
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleQuickCommand("mode_switch", "normal_mode")}
+                      disabled={mqttConnectionStatus !== "connected"}
+                    >
+                      回到普通模式
+                    </Button>
+                  </div>
                 </div>
+
+                <div className="flex flex-col gap-2">
+                  <div className="text-sm font-medium text-foreground">手动发送屏幕文字</div>
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                    <Input
+                      value={screenText}
+                      onChange={(event) => setScreenText(event.target.value)}
+                      placeholder="手动输入设备屏幕显示的文字..."
+                      className="text-sm"
+                    />
+                    <Button
+                      size="sm"
+                      onClick={() => handleQuickCommand("screen_text", screenText)}
+                      disabled={
+                        mqttConnectionStatus !== "connected" ||
+                        screenText.trim().length === 0
+                      }
+                    >
+                      发送屏幕文字
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="rounded-md border border-border bg-muted/20 p-2 text-xs text-muted-foreground">
+                  这里会直接发送设备命令，适合硬件联调；普通发送优先使用上方 AI 评估后的主按钮。
+                </div>
+
+                {pendingCmd ? (
+                  <div className="rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">
+                    已发送，正在等待设备确认。命令编号：
+                    <span className="font-mono">{pendingCmd.cmd_id}</span>
+                  </div>
+                ) : null}
+
+                {lastCmdAck ? (
+                  <div
+                    className={`rounded-md border p-2 text-xs ${
+                      lastCmdAck.status === 0
+                        ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                        : "border-rose-200 bg-rose-50 text-rose-800"
+                    }`}
+                  >
+                    最近设备回执：命令
+                    <span className="font-mono">{lastCmdAck.cmd_id}</span>，
+                    {lastCmdAck.status === 0 ? "成功" : "失败"}，状态码
+                    <span className="font-mono">{lastCmdAck.status}</span>
+                    {lastCmdAck.msg ? `，说明：${lastCmdAck.msg}` : ""}
+                    {lastCmdAck.ts ? `，时间：${lastCmdAck.ts}` : ""}
+                  </div>
+                ) : null}
               </div>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-              <span className="font-mono">LastSeen: {lastSeenAt ?? "-"}</span>
-              <Separator orientation="vertical" className="h-4" />
-              <span className="font-mono">
-                待确认命令: {pendingCmd ? pendingCmd.cmd_id : "-"}
-              </span>
-              <Separator orientation="vertical" className="h-4" />
-              <span className="font-mono">
-                最近 ACK:{" "}
-                {lastCmdAck
-                  ? `${lastCmdAck.status === 0 ? "成功" : "失败"} ${lastCmdAck.cmd_id}${
-                      lastCmdAck.ts ? ` @ ${lastCmdAck.ts}` : ""
-                    }`
-                  : "-"}
-              </span>
-            </div>
-
-            {cmdError ? (
-              <div className="rounded-md border border-rose-200 bg-rose-50 p-2 text-xs text-rose-700">
-                命令发送失败：{cmdError}
-              </div>
-            ) : null}
-
-            {mqttConnectionStatus !== "connected" ? (
-              <div className="rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">
-                MQTT 未连接，发送入口已禁用。请先确认 Broker 连接状态为 connected。
-              </div>
-            ) : null}
-
-            {mqttConnectionStatus === "connected" && !deviceOnline ? (
-              <div className="rounded-md border border-sky-200 bg-sky-50 p-2 text-xs text-sky-800">
-                Broker 已连接，但设备仍离线。可以先做 AI 评估，但“发送到设备”会保持禁用。
-              </div>
-            ) : null}
-
-            <div className="flex flex-wrap items-center gap-2">
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => handleQuickCommand("mode_switch", "focus_mode")}
-                disabled={mqttConnectionStatus !== "connected"}
-              >
-                发送 mode_switch(focus_mode)
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => handleQuickCommand("mode_switch", "normal_mode")}
-                disabled={mqttConnectionStatus !== "connected"}
-              >
-                发送 mode_switch(normal_mode)
-              </Button>
-            </div>
-
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-              <Input
-                value={screenText}
-                onChange={(event) => setScreenText(event.target.value)}
-                placeholder="输入或编辑 screen_text ..."
-                className="text-sm"
-              />
-              <Button
-                size="sm"
-                onClick={() => handleQuickCommand("screen_text", screenText)}
-                disabled={mqttConnectionStatus !== "connected" || screenText.trim().length === 0}
-              >
-                发送当前 screen_text
-              </Button>
-            </div>
-
-            <div className="rounded-md border border-border bg-muted/20 p-2 text-xs text-muted-foreground">
-              上方发送入口会真实下发 MQTT 命令；消息区只保留 AI 评估结果和设备 ACK，不再保留“看起来可发、实际不发”的假入口。
-            </div>
-
-            {pendingCmd ? (
-              <div className="rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">
-                命令已下发，等待 ACK。cmd_id:{" "}
-                <span className="font-mono">{pendingCmd.cmd_id}</span>
-              </div>
-            ) : null}
-
-            {lastCmdAck ? (
-              <div
-                className={`rounded-md border p-2 text-xs ${
-                  lastCmdAck.status === 0
-                    ? "border-emerald-200 bg-emerald-50 text-emerald-800"
-                    : "border-rose-200 bg-rose-50 text-rose-800"
-                }`}
-              >
-                ACK: <span className="font-mono">{lastCmdAck.cmd_id}</span>，
-                {lastCmdAck.status === 0 ? "成功" : "失败"}，status=
-                <span className="font-mono">{lastCmdAck.status}</span>
-                {lastCmdAck.msg ? `，msg=${lastCmdAck.msg}` : ""}
-                {lastCmdAck.ts ? `，时间=${lastCmdAck.ts}` : ""}
-              </div>
-            ) : null}
-          </div>
-        </CardContent>
+            </CardContent>
+          </CollapsibleContent>
+        </Collapsible>
       </Card>
     </div>
   )
