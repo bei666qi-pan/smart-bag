@@ -1,0 +1,12 @@
+NEXT_PUBLIC_AMAP_KEY=YOUR_AMAP_KEY
+NEXT_PUBLIC_AMAP_SECURITY_CODE=YOUR_AMAP_SECURITY_CODE
+COZE_TOKEN=YOUR_COZE_TOKEN
+COZE_BOT_ID=YOUR_COZE_BOT_ID
+NEXT_PUBLIC_ESP32_STREAM_URL=YOUR_ESP32_STREAM_URL
+
+【摄像头】
+
+Coolify 侧你需要对齐的关键点（否则仍会回落自签证书）
+应用内部端口：指向 3000
+容器健康/可达：Traefik 必须能访问到容器的 :3000
+（可选但推荐）MQTT WebSocket：Traefik 的 /ws（或 /mqtt）要转发到 Mosquitto :8083
