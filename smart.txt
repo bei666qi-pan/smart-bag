@@ -1,13 +1,1 @@
-NEXT_PUBLIC_AMAP_KEY=7317374a1ff3ff2c76abc2c17d93cce9
-NEXT_PUBLIC_AMAP_SECURITY_CODE=7c31ae60489c10feaf2eb19beccf9fa9
-COZE_TOKEN=pat_corZI0nwHCjIs3LTdaHzniFX8HFvBrPodDozzKTn9xxTLyHuGUeFA4c2LUIlrfD4
-COZE_BOT_ID=7604724872832925702
-NEXT_PUBLIC_ESP32_STREAM_URL
-【摄像头】
 
-
-
-oolify 侧你需要对齐的关键点（否则仍会回落自签证书）
-应用内部端口：指向 3000
-容器健康/可达：Traefik 必须能访问到容器的 :3000
-（可选但推荐）MQTT WebSocket：Traefik 的 /ws（或 /mqtt）要转发到 Mosquitto :8083
