@@ -17,7 +17,20 @@ yarn-error.log*
 .pnpm-debug.log*
 
 # env files
-.env*
+.env
+.env.*
+!.env.example
+
+# local config with real values
+mosquitto.conf
+docker-compose.yml
+smart.txt
+nginx/*.conf
+!nginx/*.conf.example
+
+# runtime artifacts
+*.log
+*.pid
 
 # vercel
 .vercel

@@ -1,5 +1,4 @@
 services:
-  # ── Nginx Reverse Proxy ──
   nginx:
     image: nginx:alpine
     ports:
@@ -11,30 +10,28 @@ services:
       - mqtt
     restart: unless-stopped
 
-  # ── Next.js IoT Dashboard ──
   web:
     build:
       context: .
       dockerfile: Dockerfile
       args:
-        - NEXT_PUBLIC_MQTT_URL=${NEXT_PUBLIC_MQTT_URL:-wss://bag.versecraft.cn/mqtt}
+        - NEXT_PUBLIC_MQTT_URL=${NEXT_PUBLIC_MQTT_URL:-wss://YOUR_MQTT_DOMAIN/mqtt}
         - NEXT_PUBLIC_MQTT_PATH=${NEXT_PUBLIC_MQTT_PATH:-/mqtt}
-        - NEXT_PUBLIC_AMAP_KEY=${NEXT_PUBLIC_AMAP_KEY:-}
-        - NEXT_PUBLIC_AMAP_SECURITY_CODE=${NEXT_PUBLIC_AMAP_SECURITY_CODE:-}
-        - NEXT_PUBLIC_ESP32_STREAM_URL=${NEXT_PUBLIC_ESP32_STREAM_URL:-}
+        - NEXT_PUBLIC_AMAP_KEY=${NEXT_PUBLIC_AMAP_KEY:-YOUR_AMAP_KEY}
+        - NEXT_PUBLIC_AMAP_SECURITY_CODE=${NEXT_PUBLIC_AMAP_SECURITY_CODE:-YOUR_AMAP_SECURITY_CODE}
+        - NEXT_PUBLIC_ESP32_STREAM_URL=${NEXT_PUBLIC_ESP32_STREAM_URL:-https://YOUR_CAMERA_STREAM_URL}
     expose:
       - "3000"
     environment:
       - REDIS_URL=redis://redis:6379
       - MQTT_SERVER_URL=mqtt://mqtt:1883
-      - NEWAPI_BASE_URL=${NEWAPI_BASE_URL:-https://newkey.versecraft.cn}
-      - NEWAPI_API_KEY=${NEWAPI_API_KEY:-}
+      - NEWAPI_BASE_URL=${NEWAPI_BASE_URL:-https://YOUR_NEWAPI_DOMAIN}
+      - NEWAPI_API_KEY=${NEWAPI_API_KEY:-YOUR_NEWAPI_API_KEY}
     depends_on:
       - mqtt
       - redis
     restart: unless-stopped
 
-  # ── Eclipse Mosquitto MQTT Broker ──
   mqtt:
     image: eclipse-mosquitto:latest
     ports:
@@ -48,7 +45,7 @@ services:
       - traefik.enable=true
       - traefik.docker.network=coolify
       - traefik.http.routers.mqtt-ws.entrypoints=https
-      - traefik.http.routers.mqtt-ws.rule=Host(`mqtt.bag.versecraft.cn`)
+      - traefik.http.routers.mqtt-ws.rule=Host(`mqtt.YOUR_DOMAIN`)
       - traefik.http.routers.mqtt-ws.tls=true
       - traefik.http.routers.mqtt-ws.tls.certresolver=letsencrypt
       - traefik.http.services.mqtt-ws.loadbalancer.server.port=8083
@@ -58,7 +55,6 @@ services:
       - mosquitto_log:/mosquitto/log
     restart: unless-stopped
 
-  # ── Redis Cache ──
   redis:
     image: redis:alpine
     expose:
