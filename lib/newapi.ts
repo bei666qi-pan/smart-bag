@@ -13,6 +13,8 @@ export type ChatCompletionOptions = {
   response_format?: { type: 'json_object' | 'text' } | null
   retryWithoutResponseFormat?: boolean
   timeoutMs?: number
+  /** 用户级配置覆盖（设置页填入的 API key）；缺省回退服务端环境变量 */
+  auth?: { apiKey?: string; baseUrl?: string }
 }
 
 export type NewAPIErrorCode =
@@ -154,20 +156,19 @@ function normalizeBaseUrl(input: string) {
   return trimmed.endsWith('/v1') ? trimmed : `${trimmed}/v1`
 }
 
-function getConfig() {
-  const baseUrl = process.env.NEWAPI_BASE_URL?.trim()
-  const apiKey = process.env.NEWAPI_API_KEY?.trim()
+function getConfig(override?: { apiKey?: string; baseUrl?: string }) {
+  // 优先用用户在设置页填入的 key/地址，缺省回退服务端环境变量
+  const baseUrl = override?.baseUrl?.trim() || process.env.NEWAPI_BASE_URL?.trim()
+  const apiKey = override?.apiKey?.trim() || process.env.NEWAPI_API_KEY?.trim()
 
   if (!baseUrl || !apiKey) {
-    const missing = [
-      !baseUrl ? 'NEWAPI_BASE_URL' : null,
-      !apiKey ? 'NEWAPI_API_KEY' : null,
-    ].filter(Boolean)
-
-    console.error('[NewAPI] 配置缺失', { missing })
+    console.error('[NewAPI] 配置缺失', {
+      hasBaseUrl: Boolean(baseUrl),
+      hasApiKey: Boolean(apiKey),
+    })
     throw new NewAPIUserFacingError(
       'config_missing',
-      `NewAPI 配置缺失：请在服务端配置 ${missing.join('、')}`,
+      'AI 功能尚未激活：请在「设置」页填入 API key，或在服务端配置 NEWAPI_BASE_URL / NEWAPI_API_KEY',
     )
   }
 
@@ -247,7 +248,7 @@ export async function chatCompletion(
   messages: ChatMessage[],
   options: ChatCompletionOptions = {},
 ) {
-  const { baseUrl, apiKey } = getConfig()
+  const { baseUrl, apiKey } = getConfig(options.auth)
   const endpoint = `${baseUrl}/chat/completions`
   try {
     new URL(endpoint)

@@ -38,3 +38,8 @@ nginx/*.conf
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# deploy credentials (never commit)
+部署凭证.txt
+
+.DS_Store

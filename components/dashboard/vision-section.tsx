@@ -4,6 +4,7 @@
 
 import { useActionState, useEffect, useRef, useState } from "react"
 import { analyzeImageAction, type ActionState } from "@/app/actions/analyze-image"
+import { useIoTStore } from "@/store/useIoTStore"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -17,6 +18,7 @@ import {
   Eye,
   Info,
   Loader2,
+  Send,
   Sparkles,
   Video,
 } from "lucide-react"
@@ -163,6 +165,12 @@ export function VisionSection() {
   const imageRef = useRef<HTMLImageElement | null>(null)
   const [state, formAction, isPending] = useActionState(analyzeImageAction, initialState)
 
+  const setLastVisionResult = useIoTStore((s) => s.setLastVisionResult)
+  const publishCommand = useIoTStore((s) => s.publishCommand)
+  const mqttConnectionStatus = useIoTStore((s) => s.mqttConnectionStatus)
+  const deviceOnline = useIoTStore((s) => s.deviceOnline)
+  const pendingCmd = useIoTStore((s) => s.pendingCmd)
+
   const isProd = process.env.NODE_ENV === "production"
   const configuredStreamUrl = process.env.NEXT_PUBLIC_ESP32_STREAM_URL
   const devFallbackLanUrl = "http://192.168.1.100:81/stream"
@@ -206,8 +214,21 @@ export function VisionSection() {
 
   useEffect(() => {
     if (state.success && state.payload) {
+      const p = state.payload
+      // Share the latest result globally so the dashboard can reflect it.
+      setLastVisionResult({
+        objects: p.structured.objects,
+        scene: p.structured.scene,
+        risks: p.structured.risks,
+        confidence: p.structured.confidence,
+        analysis: p.analysis,
+        suggestion: p.suggestion,
+        screen_text: p.screen_text,
+        severity: p.severity,
+        timestamp: p.timestamp,
+      })
       toast.success("AI 分析完成", {
-        description: state.payload.analysis.slice(0, 100),
+        description: p.analysis.slice(0, 100),
       })
       return
     }
@@ -217,7 +238,7 @@ export function VisionSection() {
         description: state.message,
       })
     }
-  }, [state])
+  }, [state, setLastVisionResult])
 
   const blockedReason = (() => {
     if (streamError) return streamError
@@ -302,6 +323,39 @@ export function VisionSection() {
   const severity = payload?.severity as keyof typeof severityConfig | undefined
   const sConfig = severity ? severityConfig[severity] : null
   const SeverityIcon = sConfig?.icon ?? Info
+
+  const screenTextToSend = payload?.screen_text?.trim() ?? ""
+  const canSendToDevice =
+    mqttConnectionStatus === "connected" &&
+    deviceOnline &&
+    screenTextToSend.length > 0 &&
+    !pendingCmd
+  const sendToDeviceHint = !payload
+    ? ""
+    : pendingCmd
+      ? "上一条命令正在等待设备确认。"
+      : mqttConnectionStatus !== "connected"
+        ? "MQTT 未连接，暂时无法发送。"
+        : !deviceOnline
+          ? "设备未在线，暂时无法发送。"
+          : "将上面的屏幕文案下发到设备屏幕并等待 ACK。"
+
+  const handleSendToDevice = () => {
+    if (!screenTextToSend) {
+      toast.warning("当前没有可发送的屏幕文字")
+      return
+    }
+
+    const result = publishCommand("screen_text", screenTextToSend)
+    if (!result.ok) {
+      toast.error("发送失败", {
+        description: result.error || "设备连接暂时不可用",
+      })
+      return
+    }
+
+    toast.success("已发送到设备", { description: screenTextToSend })
+  }
 
   return (
     <div className="flex flex-col gap-4">
@@ -483,6 +537,24 @@ export function VisionSection() {
                           {sConfig?.label ?? payload.severity}
                         </Badge>
                       </div>
+                    </div>
+
+                    <div className="flex flex-col gap-1.5">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={handleSendToDevice}
+                        disabled={!canSendToDevice}
+                        className="gap-2"
+                      >
+                        <Send className="h-3.5 w-3.5" />
+                        发送到设备屏幕
+                      </Button>
+                      {sendToDeviceHint ? (
+                        <p className="text-[10px] leading-4 text-muted-foreground">
+                          {sendToDeviceHint}
+                        </p>
+                      ) : null}
                     </div>
 
                     <div className="rounded-lg border border-border bg-muted/30 p-2.5">

@@ -4,6 +4,16 @@ COZE_TOKEN=YOUR_COZE_TOKEN
 COZE_BOT_ID=YOUR_COZE_BOT_ID
 NEXT_PUBLIC_ESP32_STREAM_URL=YOUR_ESP32_STREAM_URL
 
+# Redis（账号/会话/IoT 状态镜像都依赖它，必填）
+REDIS_URL=redis://localhost:6379
+
+# 设备上传令牌（ESP32 camera.cpp 的 x-device-token 需配同一个值；不配则拒绝所有设备上传）
+DEVICE_TOKEN=CHANGE_ME_LONG_RANDOM_TOKEN
+
+# NewAPI 服务端默认配置（可选：用户也可在网页「设置」页填入自己的 key 激活 AI 功能）
+NEWAPI_BASE_URL=https://your-newapi.example.com/v1
+NEWAPI_API_KEY=YOUR_NEWAPI_KEY
+
 【摄像头】
 
 Coolify 侧你需要对齐的关键点（否则仍会回落自签证书）

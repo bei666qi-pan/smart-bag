@@ -1,27 +1,20 @@
 // app/(dashboard)/layout.tsx
-"use client"
+import { redirect } from "next/navigation"
+import { getSessionUser } from "@/lib/auth"
+import { DashboardShell } from "@/components/dashboard/dashboard-shell"
 
-import { SidebarNav } from "@/components/dashboard/sidebar-nav"
-import { TopBar } from "@/components/dashboard/top-bar"
-import { useMqttClient } from "@/hooks/useMqttClient"
-import { Toaster } from "@/components/ui/sonner"
+export const dynamic = "force-dynamic"
 
-export default function DashboardLayout({
+export default async function DashboardLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
-  // Initialize MQTT connection at dashboard root
-  useMqttClient()
+  // 服务端校验会话（middleware 只查 cookie 是否存在，这里查 Redis 确认有效）
+  const user = await getSessionUser()
+  if (!user) {
+    redirect("/login")
+  }
 
-  return (
-    <div className="flex h-screen bg-secondary">
-      <SidebarNav />
-      <div className="ml-16 flex flex-1 flex-col overflow-hidden">
-        <TopBar />
-        <main className="flex-1 overflow-y-auto p-6">{children}</main>
-      </div>
-      <Toaster />
-    </div>
-  )
+  return <DashboardShell username={user.username}>{children}</DashboardShell>
 }

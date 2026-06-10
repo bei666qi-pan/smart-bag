@@ -1,6 +1,7 @@
 "use client"
 
 import Link from "next/link"
+import { useEffect, useState } from "react"
 import {
   Eye,
   MapPin,
@@ -17,7 +18,15 @@ import {
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { DiagnosticsCard } from "@/components/dashboard/diagnostics-card"
+import { VoiceAssistantCard } from "@/components/dashboard/voice-assistant-card"
 import { useIoTStore } from "@/store/useIoTStore"
+
+const visionSeverityLabel: Record<"low" | "medium" | "high", string> = {
+  low: "正常",
+  medium: "注意",
+  high: "警告",
+}
 
 function formatMetric(value: number | null, suffix: string) {
   return typeof value === "number" ? `${value}${suffix}` : "—"
@@ -48,6 +57,43 @@ export function BentoOverview() {
   const lastSeenAt = useIoTStore((state) => state.lastSeenAt)
   const pendingCmd = useIoTStore((state) => state.pendingCmd)
   const lastCmdAck = useIoTStore((state) => state.lastCmdAck)
+  const lastVisionResult = useIoTStore((state) => state.lastVisionResult)
+
+  const [snapshot, setSnapshot] = useState<{
+    hasSnapshot: boolean
+    lastSnapshotAt: string | null
+  }>({ hasSnapshot: false, lastSnapshotAt: null })
+
+  // Poll the read-only camera status so the dashboard reflects whether a WAN
+  // snapshot exists, instead of always showing "进入视觉页查看".
+  useEffect(() => {
+    let active = true
+
+    const load = async () => {
+      try {
+        const res = await fetch("/api/camera/status", { cache: "no-store" })
+        if (!res.ok) return
+        const data = await res.json()
+        if (active) {
+          setSnapshot({
+            hasSnapshot: Boolean(data?.hasSnapshot),
+            lastSnapshotAt:
+              typeof data?.lastSnapshotAt === "string" ? data.lastSnapshotAt : null,
+          })
+        }
+      } catch {
+        // best-effort; dashboard stays usable without snapshot status
+      }
+    }
+
+    load()
+    const timer = window.setInterval(load, 10000)
+
+    return () => {
+      active = false
+      window.clearInterval(timer)
+    }
+  }, [])
 
   const mqttLabel: Record<typeof mqttConnectionStatus, string> = {
     connected: "已连接",
@@ -191,8 +237,13 @@ export function BentoOverview() {
                   <Eye className="h-4 w-4" />
                   视觉
                 </span>
-                <Badge variant="outline" className="text-[10px]">
-                  按需分析
+                <Badge
+                  variant={lastVisionResult ? "secondary" : "outline"}
+                  className="text-[10px]"
+                >
+                  {lastVisionResult
+                    ? visionSeverityLabel[lastVisionResult.severity]
+                    : "按需分析"}
                 </Badge>
               </CardTitle>
             </CardHeader>
@@ -202,16 +253,25 @@ export function BentoOverview() {
                   <Eye className="h-8 w-8 text-muted-foreground/50" />
                 </div>
                 <div className="flex flex-col gap-2 text-xs">
-                  <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground">输入源</span>
-                    <span className="font-medium text-foreground">进入视觉页查看</span>
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-muted-foreground">最近识别场景</span>
+                    <span className="max-w-[60%] truncate font-medium text-foreground">
+                      {lastVisionResult ? lastVisionResult.scene : "暂无数据"}
+                    </span>
                   </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground">AI 结果</span>
-                    <span className="font-medium text-foreground">暂无数据</span>
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-muted-foreground">AI 结论</span>
+                    <span className="max-w-[60%] truncate font-medium text-foreground">
+                      {lastVisionResult ? lastVisionResult.screen_text : "进入视觉页触发分析"}
+                    </span>
                   </div>
-                  <div className="rounded-lg border border-dashed border-border bg-muted/20 p-2 text-muted-foreground">
-                    未展示任何示例分辨率、延迟或分析日志，避免误判为实时链路已打通。
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-muted-foreground">最近快照</span>
+                    <span className="max-w-[60%] truncate font-mono text-foreground">
+                      {snapshot.hasSnapshot
+                        ? formatTimestamp(snapshot.lastSnapshotAt)
+                        : "暂无快照"}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -294,10 +354,47 @@ export function BentoOverview() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="rounded-lg border border-dashed border-border bg-muted/20 p-4 text-sm text-muted-foreground">
-              当前仓库没有“书包内物品清单”的实时数据源，仪表盘不再默认展示示例物品。
-              需要真实结果时，请进入视觉页触发实际图像分析。
-            </div>
+            {lastVisionResult ? (
+              <div className="flex flex-col gap-3">
+                <div className="flex flex-wrap gap-1.5">
+                  {lastVisionResult.objects.length > 0 ? (
+                    lastVisionResult.objects.map((item, index) => (
+                      <Badge
+                        key={`${item}-${index}`}
+                        variant="secondary"
+                        className="text-[10px]"
+                      >
+                        {item}
+                      </Badge>
+                    ))
+                  ) : (
+                    <span className="text-sm text-muted-foreground">未识别到明确物品</span>
+                  )}
+                </div>
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                  <span>
+                    场景：
+                    <span className="text-foreground">{lastVisionResult.scene}</span>
+                  </span>
+                  <span>
+                    置信度：
+                    <span className="text-foreground">
+                      {(lastVisionResult.confidence * 100).toFixed(0)}%
+                    </span>
+                  </span>
+                  <span>
+                    更新：
+                    <span className="text-foreground">
+                      {formatTimestamp(lastVisionResult.timestamp)}
+                    </span>
+                  </span>
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-lg border border-dashed border-border bg-muted/20 p-4 text-sm text-muted-foreground">
+                尚未有视觉识别结果。进入视觉页触发一次 bag-image 分析后，这里会显示最近识别到的物品与场景。
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -340,6 +437,11 @@ export function BentoOverview() {
             </div>
           </CardContent>
         </Card>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <DiagnosticsCard />
+        <VoiceAssistantCard />
       </div>
     </div>
   )

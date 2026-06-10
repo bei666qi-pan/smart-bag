@@ -2,7 +2,7 @@
 
 import { cn } from "@/lib/utils"
 import Link from "next/link"
-import { usePathname } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import {
   LayoutDashboard,
   Eye,
@@ -11,6 +11,7 @@ import {
   Settings,
   User,
   Backpack,
+  LogOut,
 } from "lucide-react"
 import {
   Tooltip,
@@ -18,6 +19,14 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 
 const navItems = [
   { id: "dashboard", label: "仪表盘", icon: LayoutDashboard, href: "/" },
@@ -26,8 +35,18 @@ const navItems = [
   { id: "interaction", label: "互动中心", icon: MessageCircle, href: "/interaction" },
 ]
 
-export function SidebarNav() {
+export function SidebarNav({ username }: { username?: string }) {
   const pathname = usePathname()
+  const router = useRouter()
+
+  async function handleLogout() {
+    try {
+      await fetch("/api/auth/logout", { method: "POST" })
+    } finally {
+      router.replace("/login")
+      router.refresh()
+    }
+  }
 
   return (
     <TooltipProvider delayDuration={0}>
@@ -71,28 +90,44 @@ export function SidebarNav() {
         <div className="flex flex-col items-center gap-2">
           <Tooltip>
             <TooltipTrigger asChild>
-              <button
-                className="flex h-10 w-10 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+              <Link
+                href="/settings"
+                className={cn(
+                  "flex h-10 w-10 items-center justify-center rounded-xl transition-colors",
+                  pathname === "/settings"
+                    ? "bg-primary text-primary-foreground shadow-sm"
+                    : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                )}
                 aria-label="设置"
               >
                 <Settings className="h-5 w-5" />
-              </button>
+              </Link>
             </TooltipTrigger>
             <TooltipContent side="right" sideOffset={8}>
               <p>设置</p>
             </TooltipContent>
           </Tooltip>
 
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-accent">
-                <User className="h-4 w-4 text-accent-foreground" />
-              </div>
-            </TooltipTrigger>
-            <TooltipContent side="right" sideOffset={8}>
-              <p>个人资料</p>
-            </TooltipContent>
-          </Tooltip>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                className="flex h-9 w-9 items-center justify-center rounded-full bg-accent transition-colors hover:bg-primary hover:text-primary-foreground"
+                aria-label="账号"
+              >
+                <User className="h-4 w-4" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent side="right" align="end" sideOffset={8}>
+              <DropdownMenuLabel className="font-mono text-xs">
+                {username ?? "已登录"}
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={handleLogout} className="text-destructive">
+                <LogOut className="mr-2 h-4 w-4" />
+                退出登录
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </aside>
       {/* <!-- /SECTION:SIDEBAR --> */}

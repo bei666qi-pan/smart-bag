@@ -273,6 +273,40 @@ export async function startRedisBackedMqttDaemon(): Promise<DaemonStartResult> {
             }
           }
 
+          // Jetson 语音子系统（独立命名空间 v5/bag/voice/*）。
+          // 用 voiceStatus / voiceLastSeenAt，与设备本体 status / lastSeenAt 区分开。
+          if (topic === 'v5/bag/voice/status' && data.status) {
+            await redis.hset(
+              'bag:latest',
+              'voiceStatus',
+              String(data.status),
+              'voiceLastSeenAt',
+              mirroredAt
+            )
+          }
+
+          if (topic === 'v5/bag/voice/event') {
+            await redis.hset(
+              'bag:latest',
+              'lastVoiceEvent',
+              JSON.stringify(data),
+              'voiceLastSeenAt',
+              mirroredAt
+            )
+          }
+
+          // [语音联动] Jetson→ESP32 的语音控制命令（v5/bag/voice/cmd）。镜像最近一条到 lastVoiceCmd，
+          // 供仪表盘展示「语音发起的指令」；归入语音子系统时间线（更新 voiceLastSeenAt，不动设备 lastSeenAt）。
+          if (topic === 'v5/bag/voice/cmd') {
+            await redis.hset(
+              'bag:latest',
+              'lastVoiceCmd',
+              JSON.stringify(data),
+              'voiceLastSeenAt',
+              mirroredAt
+            )
+          }
+
           updateDaemonStatus({
             lastMirroredAt: mirroredAt,
             lastMirroredTopic: topic,

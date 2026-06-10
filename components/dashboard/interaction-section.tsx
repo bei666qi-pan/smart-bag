@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useTransition } from "react"
+import { useEffect, useRef, useState, useTransition } from "react"
 import {
   reviewDeviceMessageAction,
   type DeviceMessageReview,
@@ -132,13 +132,54 @@ export function InteractionSection() {
     }
   }, [focusRemainingSeconds, isFocusRunning])
 
+  // Bridge the local focus timer to the device. Best-effort only: when the
+  // device is offline the timer stays purely local and no command is sent.
+  const focusCompletionNotifiedRef = useRef(false)
+
+  const notifyDeviceMode = (mode: "focus_mode" | "normal_mode") => {
+    if (mqttConnectionStatus !== "connected" || !deviceOnline) {
+      return
+    }
+
+    const result = publishCommand("mode_switch", mode)
+    if (result.ok) {
+      toast.info(
+        mode === "focus_mode" ? "已通知设备进入专注模式" : "已通知设备恢复普通模式",
+      )
+    }
+  }
+
+  // When the countdown naturally reaches 0, tell the device to leave focus mode.
+  useEffect(() => {
+    if (focusRemainingSeconds > 0) {
+      focusCompletionNotifiedRef.current = false
+      return
+    }
+
+    if (!focusCompletionNotifiedRef.current) {
+      focusCompletionNotifiedRef.current = true
+      notifyDeviceMode("normal_mode")
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusRemainingSeconds])
+
   const appendMessages = (...nextMessages: ChatMessage[]) => {
     setMessages((current) => [...current, ...nextMessages])
   }
 
   const resetFocus = () => {
+    const wasRunning = isFocusRunning
     setIsFocusRunning(false)
     setFocusRemainingSeconds(25 * 60)
+    if (wasRunning) {
+      notifyDeviceMode("normal_mode")
+    }
+  }
+
+  const handleToggleFocus = () => {
+    const next = !isFocusRunning
+    setIsFocusRunning(next)
+    notifyDeviceMode(next ? "focus_mode" : "normal_mode")
   }
 
   const handleReviewMessage = () => {
@@ -489,7 +530,7 @@ export function InteractionSection() {
                 <Button
                   size="lg"
                   className="h-12 w-12 rounded-full"
-                  onClick={() => setIsFocusRunning((running) => !running)}
+                  onClick={handleToggleFocus}
                   aria-label={isFocusRunning ? "暂停计时器" : "开始计时器"}
                 >
                   {isFocusRunning ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5" />}

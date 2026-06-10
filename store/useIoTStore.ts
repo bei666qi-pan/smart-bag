@@ -25,6 +25,40 @@ export type PendingCommand = {
   sentAt: string
 }
 
+export type VisionSeverity = 'low' | 'medium' | 'high'
+
+// Latest vision analysis shared globally so other views (e.g. dashboard) can
+// reflect the most recent bag-image + bag-text result, not just the vision page.
+export type VisionResultSnapshot = {
+  objects: string[]
+  scene: string
+  risks: string[]
+  confidence: number
+  analysis: string
+  suggestion: string
+  screen_text: string
+  severity: VisionSeverity
+  timestamp: string
+}
+
+// Voice subsystem (Jetson「小乐」) event mirrored from v5/bag/voice/event.
+export type VoiceEvent = {
+  type: string
+  ts?: string
+  user?: string
+  reply?: string
+  route?: string
+  via?: string
+}
+
+// [语音联动] Jetson→ESP32 的语音控制命令，镜像自 v5/bag/voice/cmd。
+export type VoiceCmd = {
+  action: string
+  value?: string
+  ts?: string
+  src?: string
+}
+
 interface IoTState {
   mqttConnectionStatus: MqttConnectionStatus
   setMqttConnectionStatus: (status: MqttConnectionStatus) => void
@@ -62,6 +96,18 @@ interface IoTState {
   setCmdError: (error: string | null) => void
   publishCommand: (action: IoTCmdType, value: string) => { ok: boolean; cmd_id?: string; error?: string }
 
+  lastVisionResult: VisionResultSnapshot | null
+  setLastVisionResult: (result: VisionResultSnapshot | null) => void
+
+  voiceOnline: boolean
+  voiceLastSeenAt: string | null
+  lastVoiceEvent: VoiceEvent | null
+  setVoiceOnline: (online: boolean) => void
+  setLastVoiceEvent: (event: VoiceEvent | null) => void
+
+  lastVoiceCmd: VoiceCmd | null // [语音联动] 最近一条语音发起的控制命令
+  setLastVoiceCmd: (cmd: VoiceCmd | null) => void // [语音联动]
+
   fetchInitialState: () => Promise<void>
 }
 
@@ -85,6 +131,11 @@ export const useIoTStore = create<IoTState>()((set) => ({
     pendingCmd: null,
     lastCmdAck: null,
     cmdError: null,
+    lastVisionResult: null,
+    voiceOnline: false,
+    voiceLastSeenAt: null,
+    lastVoiceEvent: null,
+    lastVoiceCmd: null, // [语音联动]
 
     setMqttConnectionStatus: (status) =>
       set((state) => {
@@ -127,6 +178,25 @@ export const useIoTStore = create<IoTState>()((set) => ({
     setPendingCmd: (cmd) => set({ pendingCmd: cmd }),
     setLastCmdAck: (ack) => set({ lastCmdAck: ack }),
     setCmdError: (error) => set({ cmdError: error }),
+    setLastVisionResult: (result) => set({ lastVisionResult: result }),
+
+    setVoiceOnline: (online) =>
+      set((state) => {
+        logStateTransition('Voice online', state.voiceOnline, online)
+        return { voiceOnline: online }
+      }),
+    setLastVoiceEvent: (event) =>
+      set({
+        lastVoiceEvent: event,
+        voiceLastSeenAt: event?.ts ?? new Date().toISOString(),
+      }),
+
+    // [语音联动] 记录最近一条语音发起的控制命令，并更新语音时间线
+    setLastVoiceCmd: (cmd) =>
+      set({
+        lastVoiceCmd: cmd,
+        voiceLastSeenAt: cmd?.ts ?? new Date().toISOString(),
+      }),
 
     publishCommand: (action, value) => {
       const state = useIoTStore.getState()
@@ -200,6 +270,19 @@ export const useIoTStore = create<IoTState>()((set) => ({
 
         if (typeof data.lastSeenAt === 'string' || data.lastSeenAt === null) {
           patch.lastSeenAt = data.lastSeenAt
+        }
+
+        // Voice subsystem presence/last event (refresh-recovery; realtime comes from MQTT).
+        patch.voiceOnline = data.voiceOnline === true
+        if (typeof data.voiceLastSeenAt === 'string' || data.voiceLastSeenAt === null) {
+          patch.voiceLastSeenAt = data.voiceLastSeenAt
+        }
+        if (data.lastVoiceEvent && typeof data.lastVoiceEvent === 'object') {
+          patch.lastVoiceEvent = data.lastVoiceEvent as VoiceEvent
+        }
+        // [语音联动] 最近语音控制命令（刷新恢复；实时来自 MQTT）
+        if (data.lastVoiceCmd && typeof data.lastVoiceCmd === 'object') {
+          patch.lastVoiceCmd = data.lastVoiceCmd as VoiceCmd
         }
 
         set(patch)

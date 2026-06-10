@@ -8,6 +8,7 @@ import {
   type ChatMessage,
 } from '@/lib/newapi'
 import { analyzeTextWithBagText, type TextAnalysisOutput } from '@/app/actions/analyze-text'
+import { getSessionUser, getUserNewapiConfig } from '@/lib/auth'
 
 const MAX_IMAGE_SIZE_BYTES = 8 * 1024 * 1024
 
@@ -77,12 +78,16 @@ function buildBagImageMessages(base64Image: string): ChatMessage[] {
   ]
 }
 
-async function callBagImage(base64Image: string) {
+async function callBagImage(
+  base64Image: string,
+  auth?: { apiKey: string; baseUrl?: string },
+) {
   const response = await chatCompletion('bag-image', buildBagImageMessages(base64Image), {
     temperature: 0.1,
     max_tokens: 800,
     response_format: { type: 'json_object' },
     timeoutMs: 45_000,
+    auth,
   })
 
   const raw = extractModelText(response)
@@ -114,6 +119,16 @@ export async function analyzeImageAction(
   formData: FormData,
 ): Promise<ActionState> {
   try {
+    // 鉴权：未登录直接拒绝；已登录优先用其设置页填入的 API key
+    const user = await getSessionUser()
+    if (!user) {
+      return {
+        success: false,
+        message: '未登录或会话已过期，请重新登录',
+      }
+    }
+    const auth = (await getUserNewapiConfig(user.username)) ?? undefined
+
     const candidate = formData.get('image')
     const parsed = imageUploadSchema.safeParse({ image: candidate })
 
@@ -139,7 +154,7 @@ export async function analyzeImageAction(
     const base64Image = buffer.toString('base64')
 
     console.log('[Vision Analysis] 开始调用 bag-image')
-    const structured = await callBagImage(base64Image)
+    const structured = await callBagImage(base64Image, auth)
     console.log('[Vision Analysis] bag-image 完成', {
       objects: structured.objects,
       scene: structured.scene,

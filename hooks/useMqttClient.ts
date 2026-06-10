@@ -13,6 +13,9 @@ interface MqttConfig {
     sensors: string
     gps: string
     cmdAck: string
+    voiceStatus: string
+    voiceEvent: string
+    voiceCmd: string // [语音联动] Jetson→ESP32 的语音控制命令
   }
 }
 
@@ -24,6 +27,9 @@ const DEFAULT_CONFIG: MqttConfig = {
     sensors: 'v5/bag/sensors',
     gps: 'v5/bag/gps',
     cmdAck: 'v5/bag/cmd/ack',
+    voiceStatus: 'v5/bag/voice/status',
+    voiceEvent: 'v5/bag/voice/event',
+    voiceCmd: 'v5/bag/voice/cmd', // [语音联动]
   },
 }
 
@@ -94,6 +100,30 @@ export function useMqttClient(config: Partial<MqttConfig> = {}) {
         const currentStore = useIoTStore.getState()
 
         console.log(`[MQTT] Message received [${topic}]`, data)
+
+        // Voice subsystem (Jetson「小乐」) — independent presence; must NOT bump the
+        // device's lastSeenAt (that belongs to the ESP32 sensor board).
+        if (topic === finalConfig.topics.voiceStatus) {
+          if (data.status === 'online') {
+            currentStore.setVoiceOnline(true)
+          } else if (data.status === 'offline') {
+            currentStore.setVoiceOnline(false)
+          }
+          return
+        }
+
+        if (topic === finalConfig.topics.voiceEvent) {
+          currentStore.setLastVoiceEvent(data)
+          return
+        }
+
+        // [语音联动] Jetson→ESP32 的语音控制命令（独立命名空间，不 bump 设备 lastSeen）
+        if (topic === finalConfig.topics.voiceCmd) {
+          currentStore.setLastVoiceCmd(data)
+          return
+        }
+
+        // Device topics below bump device last-seen.
         currentStore.markLastSeen()
 
         if (topic === finalConfig.topics.lwt) {

@@ -8,6 +8,20 @@ import {
   parseModelJSON,
   type ChatMessage,
 } from '@/lib/newapi'
+import { getSessionUser, getUserNewapiConfig } from '@/lib/auth'
+
+/**
+ * 鉴权 + 解析当前用户的 NewAPI 配置：
+ * 未登录直接拒绝；已登录则优先用其在设置页填入的 key（无则回退服务端环境变量）。
+ */
+async function resolveUserNewapiAuth() {
+  const user = await getSessionUser()
+  if (!user) {
+    throw new NewAPIUserFacingError('auth_failed', '未登录或会话已过期，请重新登录')
+  }
+  const config = await getUserNewapiConfig(user.username)
+  return config ?? undefined
+}
 
 const textAnalysisOutputSchema = z.object({
   analysis: z.string().trim().min(1),
@@ -94,11 +108,14 @@ export async function analyzeTextWithBagText(
     throw new Error('待分析文本不能为空')
   }
 
+  const auth = await resolveUserNewapiAuth()
+
   const response = await chatCompletion('bag-text', buildBagTextMessages(input), {
     temperature: 0.3,
     max_tokens: 512,
     response_format: null,
     timeoutMs: 30_000,
+    auth,
   })
 
   let raw = ''

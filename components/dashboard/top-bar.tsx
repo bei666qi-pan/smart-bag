@@ -17,6 +17,7 @@ const viewLabels: Record<string, string> = {
   "/vision": "\u89c6\u89c9\u4e2d\u5fc3",
   "/location": "\u4f4d\u7f6e\u8ffd\u8e2a",
   "/interaction": "\u4e92\u52a8\u4e2d\u5fc3",
+  "/settings": "\u8bbe\u7f6e",
 }
 
 const mqttBadgeStyles = {
