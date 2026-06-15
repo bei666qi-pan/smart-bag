@@ -200,46 +200,41 @@ export const useIoTStore = create<IoTState>()((set) => ({
 
     publishCommand: (action, value) => {
       const state = useIoTStore.getState()
-      const client = state.mqttClient
-
-      if (!client) {
-        return { ok: false, error: 'MQTT 客户端尚未初始化' }
-      }
-
-      if (state.mqttConnectionStatus !== 'connected') {
-        return { ok: false, error: 'MQTT 未连接，无法下发命令' }
-      }
 
       const cmd_id =
         typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
           ? crypto.randomUUID()
           : `cmd_${Date.now()}_${Math.random().toString(16).slice(2, 6)}`
       const sentAt = new Date().toISOString()
-      const body = JSON.stringify({ id: cmd_id, action, value })
 
-      try {
-        state.setCmdError(null)
-        state.setPendingCmd({ cmd_id, type: action, value, sentAt })
+      // 指令改为「经服务端鉴权后由 server 账号下发」，浏览器不再直连 MQTT 发 cmd
+      // （否则任何匿名客户端都能向 v5/bag/cmd 注入指令）。ACK 仍通过 MQTT 订阅
+      // v5/bag/cmd/ack 异步回来，pendingCmd 的清除逻辑保持不变。
+      state.setCmdError(null)
+      state.setPendingCmd({ cmd_id, type: action, value, sentAt })
 
-        client.publish('v5/bag/cmd', body, { qos: 1 }, (error) => {
-          if (error) {
-            console.error('[MQTT] Publish command failed:', error)
-            const currentState = useIoTStore.getState()
-            currentState.setPendingCmd(null)
-            currentState.setCmdError(error.message)
-            return
+      fetch('/api/iot/cmd', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: cmd_id, action, value }),
+      })
+        .then(async (res) => {
+          if (!res.ok) {
+            const detail = await res.json().catch(() => null)
+            throw new Error(detail?.error || `http_${res.status}`)
           }
-
-          console.log('[MQTT] Command published:', { cmd_id, action, value })
+          console.log('[CMD] Command sent via server:', { cmd_id, action, value })
+        })
+        .catch((error) => {
+          console.error('[CMD] Command send failed:', error)
+          const currentState = useIoTStore.getState()
+          if (currentState.pendingCmd?.cmd_id === cmd_id) {
+            currentState.setPendingCmd(null)
+          }
+          currentState.setCmdError(error instanceof Error ? error.message : 'send_failed')
         })
 
-        return { ok: true, cmd_id }
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'unknown_error'
-        state.setCmdError(message)
-        state.setPendingCmd(null)
-        return { ok: false, error: message }
-      }
+      return { ok: true, cmd_id }
     },
 
     fetchInitialState: async () => {
