@@ -23,6 +23,8 @@ import {
   Focus,
   Loader2,
   MessageCircle,
+  MessageSquare,
+  Mic,
   Pause,
   Play,
   RotateCcw,
@@ -37,22 +39,7 @@ type ChatMessage = {
   sender: "parent" | "child" | "system"
   text: string
   time: string
-  source: "example" | "live"
 }
-
-const initialMessages: ChatMessage[] = [
-  { id: "example-1", sender: "parent", text: "你到学校了吗？", time: "08:25", source: "example" },
-  { id: "example-2", sender: "child", text: "是的，我刚进教室。", time: "08:26", source: "example" },
-  { id: "example-3", sender: "parent", text: "好的，记得喝水。", time: "08:27", source: "example" },
-  { id: "example-4", sender: "child", text: "好的，收到！", time: "08:28", source: "example" },
-  {
-    id: "example-5",
-    sender: "system",
-    text: "以上为示例消息记录；真实下发请先做 AI 评估，再点击“发送到设备”。",
-    time: "08:30",
-    source: "example",
-  },
-]
 
 function nowTime() {
   return new Date().toLocaleTimeString("zh-CN", {
@@ -79,20 +66,31 @@ function getCommandLabel(action: "mode_switch" | "screen_text", value: string) {
   if (action === "screen_text") {
     return `屏幕文字：${value}`
   }
-
-  if (value === "focus_mode") {
-    return "切换为专注模式"
-  }
-
-  if (value === "normal_mode") {
-    return "切换为普通模式"
-  }
-
+  if (value === "focus_mode") return "切换为专注模式"
+  if (value === "normal_mode") return "切换为普通模式"
   return `模式切换：${value}`
 }
 
+// 把语音发起的书包控制命令转成中文可读文案（与小乐语音子系统合并展示）
+function describeVoiceCmd(cmd: { action: string; value?: string }) {
+  const v = cmd.value || ""
+  if (cmd.action === "mode_switch") {
+    if (v === "focus_mode") return "进入专注模式"
+    if (v === "normal_mode") return "切换普通模式"
+    return `模式切换：${v}`
+  }
+  if (cmd.action === "indicator") {
+    if (v === "listening") return "唤醒（正在聆听）"
+    if (v === "thinking") return "思考中"
+    if (v === "idle") return "休眠"
+    return `指示灯：${v}`
+  }
+  if (cmd.action === "screen_text") return `屏显：${v}`
+  return `${cmd.action}：${v}`
+}
+
 export function InteractionSection() {
-  const [messages, setMessages] = useState(initialMessages)
+  const [messages, setMessages] = useState<ChatMessage[]>([])
   const [draftMessage, setDraftMessage] = useState("")
   const [lastReview, setLastReview] = useState<DeviceMessageReview | null>(null)
   const [reviewError, setReviewError] = useState<string | null>(null)
@@ -110,6 +108,12 @@ export function InteractionSection() {
   const lastCmdAck = useIoTStore((state) => state.lastCmdAck)
   const cmdError = useIoTStore((state) => state.cmdError)
   const publishCommand = useIoTStore((state) => state.publishCommand)
+
+  // 语音助手「小乐」状态（合并进交互页：实时经 MQTT v5/bag/voice/* 更新）
+  const voiceOnline = useIoTStore((state) => state.voiceOnline)
+  const lastVoiceEvent = useIoTStore((state) => state.lastVoiceEvent)
+  const lastVoiceCmd = useIoTStore((state) => state.lastVoiceCmd)
+  const isVoiceDialog = lastVoiceEvent?.type === "dialog"
 
   useEffect(() => {
     if (!isFocusRunning || focusRemainingSeconds <= 0) {
@@ -208,13 +212,11 @@ export function InteractionSection() {
           appendMessages({
             id: `live-system-review-error-${Date.now()}`,
             sender: "system",
-            text: `AI 评估暂时不可用：${result.message}。你仍可展开“高级调试与设备控制”，手动输入要显示在设备上的短文本后发送。`,
+            text: `AI 评估暂时不可用：${result.message}。可展开下方“高级调试与设备控制”手动发送屏幕文字。`,
             time: nowTime(),
-            source: "live",
           })
           toast.error("AI 暂时不可用，请稍后重试", {
-            description:
-              "需要继续联调时，可展开“高级调试与设备控制”手动发送屏幕文字。",
+            description: "可展开“高级调试与设备控制”手动发送屏幕文字。",
           })
           return
         }
@@ -230,14 +232,12 @@ export function InteractionSection() {
             sender: "parent",
             text: trimmed,
             time: nowTime(),
-            source: "live",
           },
           {
             id: `live-system-review-${Date.now() + 1}`,
             sender: "system",
             text: `AI 评估：${review.screen_text}。${review.decision_reason}`,
             time: nowTime(),
-            source: "live",
           },
         )
 
@@ -254,8 +254,7 @@ export function InteractionSection() {
         const message = error instanceof Error ? error.message : "未知错误"
         setReviewError(message)
         toast.error("AI 暂时不可用，请稍后重试", {
-          description:
-            "需要继续联调时，可展开“高级调试与设备控制”手动发送屏幕文字。",
+          description: "可展开“高级调试与设备控制”手动发送屏幕文字。",
         })
       }
     })
@@ -292,7 +291,6 @@ export function InteractionSection() {
       sender: "system",
       text: `已发送到设备，等待设备确认：${trimmed}`,
       time: nowTime(),
-      source: "live",
     })
 
     toast.success("已发送到设备", {
@@ -349,74 +347,110 @@ export function InteractionSection() {
             <div className="flex items-center justify-between gap-3">
               <CardTitle className="flex items-center gap-2 text-sm font-medium text-foreground">
                 <MessageCircle className="h-4 w-4" />
-                消息
+                对话
               </CardTitle>
-              <Badge variant="outline" className="text-[10px]">
-                设备屏幕消息
+              <Badge
+                variant="secondary"
+                className={`flex items-center gap-1 text-[10px] ${
+                  voiceOnline
+                    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                    : "border-gray-200 bg-gray-50 text-gray-600"
+                }`}
+              >
+                <Mic className="h-3 w-3" />
+                小乐{voiceOnline ? "在线" : "离线"}
               </Badge>
             </div>
           </CardHeader>
           <CardContent>
             <div className="flex flex-col gap-3">
-              <div className="rounded-lg border border-dashed border-border bg-muted/20 p-2 text-[11px] leading-5 text-muted-foreground">
-                先输入想显示在书包屏幕上的原始消息，AI 会帮你整理成更短、更适合设备展示的文字。
-                确认无误后，再点击“发送到设备”。
+              {/* 语音助手小乐：最近一次语音对话 + 语音发起的控制命令（与消息合并展示） */}
+              <div className="rounded-lg border border-border bg-muted/20 p-3">
+                <div className="mb-1.5 flex items-center gap-2 text-xs font-medium text-foreground">
+                  <Mic className="h-3.5 w-3.5" />
+                  语音助手小乐
+                </div>
+                {isVoiceDialog ? (
+                  <div className="flex flex-col gap-1 text-xs">
+                    <div className="flex items-start gap-2">
+                      <span className="shrink-0 text-muted-foreground">孩子说</span>
+                      <span className="text-foreground">{lastVoiceEvent?.user || "—"}</span>
+                    </div>
+                    <div className="flex items-start gap-2">
+                      <MessageSquare className="mt-0.5 h-3 w-3 shrink-0 text-muted-foreground" />
+                      <span className="text-foreground">{lastVoiceEvent?.reply || "—"}</span>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    {voiceOnline
+                      ? "小乐在线，等待孩子的语音对话…"
+                      : "小乐离线。设备上线后，这里会显示最近一次语音对话。"}
+                  </p>
+                )}
+                {lastVoiceCmd ? (
+                  <div className="mt-2 flex items-center gap-2 border-t border-border pt-2 text-[11px]">
+                    <Badge variant="outline" className="shrink-0 text-[10px]">
+                      语音指令
+                    </Badge>
+                    <span className="text-foreground">{describeVoiceCmd(lastVoiceCmd)}</span>
+                  </div>
+                ) : null}
               </div>
 
-              <ScrollArea className="h-64">
-                <div className="flex flex-col gap-3 pr-3">
-                  {messages.map((message) => {
-                    if (message.sender === "system") {
-                      return (
-                        <div key={message.id} className="flex justify-center">
-                          <Badge
-                            variant="secondary"
-                            className="flex max-w-full items-center gap-2 whitespace-normal px-3 py-1 text-[10px] font-normal leading-5"
-                          >
-                            <span>{message.text}</span>
-                            <span className="text-[9px] opacity-70">{message.time}</span>
-                          </Badge>
-                        </div>
-                      )
-                    }
-
-                    const isParent = message.sender === "parent"
-
-                    return (
-                      <div
-                        key={message.id}
-                        className={`flex ${isParent ? "justify-start" : "justify-end"}`}
-                      >
-                        <div
-                          className={`max-w-[75%] rounded-2xl px-4 py-2.5 ${
-                            isParent
-                              ? "rounded-tl-sm bg-muted text-foreground"
-                              : "rounded-tr-sm bg-primary text-primary-foreground"
-                          }`}
-                        >
-                          <div className="mb-1 flex items-center gap-2">
-                            {message.source === "example" ? (
-                              <Badge variant="outline" className="h-5 text-[9px]">
-                                示例
-                              </Badge>
-                            ) : null}
+              {messages.length === 0 ? (
+                <div className="flex h-48 items-center justify-center rounded-lg border border-dashed border-border bg-muted/10 px-4 text-center text-xs leading-5 text-muted-foreground">
+                  还没有发送给设备的消息。输入想显示在书包屏幕上的内容，AI 评估后即可发送。
+                </div>
+              ) : (
+                <ScrollArea className="h-64">
+                  <div className="flex flex-col gap-3 pr-3">
+                    {messages.map((message) => {
+                      if (message.sender === "system") {
+                        return (
+                          <div key={message.id} className="flex justify-center">
+                            <Badge
+                              variant="secondary"
+                              className="flex max-w-full items-center gap-2 whitespace-normal px-3 py-1 text-[10px] font-normal leading-5"
+                            >
+                              <span>{message.text}</span>
+                              <span className="text-[9px] opacity-70">{message.time}</span>
+                            </Badge>
                           </div>
-                          <p className="text-sm leading-relaxed">{message.text}</p>
-                          <p
-                            className={`mt-1 text-right text-[10px] ${
+                        )
+                      }
+
+                      const isParent = message.sender === "parent"
+
+                      return (
+                        <div
+                          key={message.id}
+                          className={`flex ${isParent ? "justify-start" : "justify-end"}`}
+                        >
+                          <div
+                            className={`max-w-[75%] rounded-2xl px-4 py-2.5 ${
                               isParent
-                                ? "text-muted-foreground"
-                                : "text-primary-foreground/70"
+                                ? "rounded-tl-sm bg-muted text-foreground"
+                                : "rounded-tr-sm bg-primary text-primary-foreground"
                             }`}
                           >
-                            {message.time}
-                          </p>
+                            <p className="text-sm leading-relaxed">{message.text}</p>
+                            <p
+                              className={`mt-1 text-right text-[10px] ${
+                                isParent
+                                  ? "text-muted-foreground"
+                                  : "text-primary-foreground/70"
+                              }`}
+                            >
+                              {message.time}
+                            </p>
+                          </div>
                         </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              </ScrollArea>
+                      )
+                    })}
+                  </div>
+                </ScrollArea>
+              )}
 
               {lastReview ? (
                 <div className="rounded-lg border border-border bg-muted/30 p-3">
@@ -488,9 +522,6 @@ export function InteractionSection() {
                   <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-900">
                     <div className="font-medium">AI 暂时不可用，请稍后重试</div>
                     <div className="mt-1">原因：{reviewError}</div>
-                    <div className="mt-1">
-                      需要继续联调设备时，可以展开“高级调试与设备控制”，手动输入要显示在设备上的短文本后发送。
-                    </div>
                     <Button
                       type="button"
                       size="sm"
@@ -637,7 +668,7 @@ export function InteractionSection() {
 
                 {mqttConnectionStatus === "connected" && !deviceOnline ? (
                   <div className="rounded-md border border-sky-200 bg-sky-50 p-2 text-xs text-sky-800">
-                    通信连接已建立，但设备还没有上报在线。高级控制仍可用于联调，正式发送建议等设备上线。
+                    通信连接已建立，但设备还没有上报在线。正式发送建议等设备上线。
                   </div>
                 ) : null}
 
@@ -683,10 +714,6 @@ export function InteractionSection() {
                       发送屏幕文字
                     </Button>
                   </div>
-                </div>
-
-                <div className="rounded-md border border-border bg-muted/20 p-2 text-xs text-muted-foreground">
-                  这里会直接发送设备命令，适合硬件联调；普通发送优先使用上方 AI 评估后的主按钮。
                 </div>
 
                 {pendingCmd ? (

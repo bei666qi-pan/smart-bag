@@ -20,7 +20,6 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { DiagnosticsCard } from "@/components/dashboard/diagnostics-card"
-import { VoiceAssistantCard } from "@/components/dashboard/voice-assistant-card"
 import { useIoTStore } from "@/store/useIoTStore"
 import { apiFetch } from "@/lib/api-fetch"
 
@@ -480,10 +479,7 @@ export function BentoOverview() {
         </Card>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        <DiagnosticsCard />
-        <VoiceAssistantCard />
-      </div>
+      <DiagnosticsCard />
     </div>
   )
 }
