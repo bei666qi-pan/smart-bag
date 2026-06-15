@@ -6,7 +6,6 @@ import {
   Eye,
   MapPin,
   MessageCircle,
-  BatteryMedium,
   Thermometer,
   Droplets,
   Wifi,
@@ -50,7 +49,6 @@ export function BentoOverview() {
   const mqttConnectionStatus = useIoTStore((state) => state.mqttConnectionStatus)
   const deviceOnline = useIoTStore((state) => state.deviceOnline)
   const iotApiFetchStatus = useIoTStore((state) => state.iotApiFetchStatus)
-  const battery = useIoTStore((state) => state.battery)
   const temp = useIoTStore((state) => state.temp)
   const humid = useIoTStore((state) => state.humid)
   const gpsCoords = useIoTStore((state) => state.gpsCoords)
@@ -170,20 +168,6 @@ export function BentoOverview() {
               </span>
               <span className="mt-0.5 text-[10px] text-muted-foreground">
                 来自 v5/bag/status
-              </span>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border-border bg-card">
-          <CardContent className="flex items-center gap-3 pt-6">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50">
-              <BatteryMedium className="h-5 w-5 text-blue-600" />
-            </div>
-            <div className="flex flex-col">
-              <span className="text-xs text-muted-foreground">电量</span>
-              <span className="text-sm font-semibold text-foreground">
-                {formatMetric(battery, "%")}
               </span>
             </div>
           </CardContent>

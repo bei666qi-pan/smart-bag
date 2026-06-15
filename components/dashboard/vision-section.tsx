@@ -2,15 +2,13 @@
 
 /* eslint-disable @next/next/no-img-element */
 
-import { useActionState, useEffect, useRef, useState } from "react"
+import { useActionState, useEffect, useState } from "react"
 import { analyzeImageAction, type ActionState } from "@/app/actions/analyze-image"
 import { useIoTStore } from "@/store/useIoTStore"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Label } from "@/components/ui/label"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Switch } from "@/components/ui/switch"
 import {
   AlertTriangle,
   Brain,
@@ -53,116 +51,11 @@ const severityConfig = {
   },
 } as const
 
-function isPrivateHostname(hostname: string) {
-  const host = hostname.toLowerCase()
-
-  if (host === "localhost" || host === "127.0.0.1") return true
-  if (/^10\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(host)) return true
-  if (/^192\.168\.\d{1,3}\.\d{1,3}$/.test(host)) return true
-
-  const match = host.match(/^172\.(\d{1,2})\.\d{1,3}\.\d{1,3}$/)
-  if (!match) return false
-
-  const second = Number(match[1])
-  return second >= 16 && second <= 31
-}
-
-function validateStreamUrl(
-  url: string,
-  isProd: boolean,
-): { ok: true } | { ok: false; reason: string } {
-  if (!url) {
-    return { ok: false, reason: "未配置视频流地址" }
-  }
-
-  try {
-    const parsed = new URL(url)
-    const isHttpsPage =
-      typeof window !== "undefined" && window.location.protocol === "https:"
-
-    if (isHttpsPage && parsed.protocol === "http:") {
-      return {
-        ok: false,
-        reason:
-          "当前页面是 HTTPS，HTTP 视频流会被浏览器拦截。请改用 HTTPS 流地址或切换到广域网快照模式。",
-      }
-    }
-
-    if (isProd && parsed.protocol !== "https:") {
-      return {
-        ok: false,
-        reason: "生产环境建议使用 HTTPS 视频流，或改用广域网快照模式。",
-      }
-    }
-
-    if (isProd && isPrivateHostname(parsed.hostname)) {
-      return {
-        ok: false,
-        reason: "生产环境不建议使用局域网地址直连视频流，请配置公网地址。",
-      }
-    }
-
-    return { ok: true as const }
-  } catch {
-    return { ok: false, reason: "视频流地址格式无效" }
-  }
-}
-
-function captureImageBlob(image: HTMLImageElement) {
-  const width = image.naturalWidth || image.clientWidth
-  const height = image.naturalHeight || image.clientHeight
-
-  if (!width || !height) {
-    throw new Error("当前预览尚未产生可用画面，请稍后再试")
-  }
-
-  const canvas = document.createElement("canvas")
-  canvas.width = width
-  canvas.height = height
-
-  const context = canvas.getContext("2d")
-  if (!context) {
-    throw new Error("浏览器不支持当前截帧能力")
-  }
-
-  try {
-    context.drawImage(image, 0, 0, width, height)
-  } catch {
-    throw new Error(
-      "局域网实时流当前无法直接截帧，请检查跨域配置，或切换到广域网快照模式。",
-    )
-  }
-
-  return new Promise<Blob>((resolve, reject) => {
-    try {
-      canvas.toBlob(
-        (blob) => {
-          if (blob) {
-            resolve(blob)
-            return
-          }
-
-          reject(new Error("截帧失败，未生成图片数据"))
-        },
-        "image/jpeg",
-        0.92,
-      )
-    } catch {
-      reject(
-        new Error("局域网实时流无法导出截图，请切换到广域网快照模式。"),
-      )
-    }
-  })
-}
-
 export function VisionSection() {
-  const [isWan, setIsWan] = useState(false)
   const [imageUrl, setImageUrl] = useState("")
   const [streamError, setStreamError] = useState<string | null>(null)
-  const [streamWarning, setStreamWarning] = useState<string | null>(null)
   const [frameReady, setFrameReady] = useState(false)
   const [lastFrameAt, setLastFrameAt] = useState<string | null>(null)
-  const imageRef = useRef<HTMLImageElement | null>(null)
   const [state, formAction, isPending] = useActionState(analyzeImageAction, initialState)
 
   const setLastVisionResult = useIoTStore((s) => s.setLastVisionResult)
@@ -171,36 +64,11 @@ export function VisionSection() {
   const deviceOnline = useIoTStore((s) => s.deviceOnline)
   const pendingCmd = useIoTStore((s) => s.pendingCmd)
 
-  const isProd = process.env.NODE_ENV === "production"
-  const configuredStreamUrl = process.env.NEXT_PUBLIC_ESP32_STREAM_URL
-  const devFallbackLanUrl = "http://192.168.1.100:81/stream"
-  const rawLanStreamUrl = configuredStreamUrl || (isProd ? "" : devFallbackLanUrl)
-  const validation = validateStreamUrl(rawLanStreamUrl, isProd)
-  const invalidStreamReason = validation.ok ? null : validation.reason
-  const lanStreamUrl = validation.ok ? rawLanStreamUrl : ""
-  const streamUrl = isWan ? imageUrl : lanStreamUrl
+  const streamUrl = imageUrl
   const canAnalyze = Boolean(streamUrl) && frameReady && !streamError
 
+  // 广域网快照：定时轮询 /api/camera/latest（设备用 x-device-token 上传最新图）
   useEffect(() => {
-    if (!isWan && !validation.ok) {
-      setStreamWarning(invalidStreamReason)
-    } else {
-      setStreamWarning(null)
-    }
-  }, [invalidStreamReason, isWan, validation.ok])
-
-  useEffect(() => {
-    setFrameReady(false)
-    setStreamError(null)
-    setLastFrameAt(null)
-  }, [isWan])
-
-  useEffect(() => {
-    if (!isWan) {
-      setImageUrl("")
-      return
-    }
-
     const updateSnapshot = () => {
       setFrameReady(false)
       setImageUrl(`/api/camera/latest?t=${Date.now()}`)
@@ -210,7 +78,7 @@ export function VisionSection() {
     const pollInterval = setInterval(updateSnapshot, 3000)
 
     return () => clearInterval(pollInterval)
-  }, [isWan])
+  }, [])
 
   useEffect(() => {
     if (state.success && state.payload) {
@@ -243,23 +111,19 @@ export function VisionSection() {
   const blockedReason = (() => {
     if (streamError) return streamError
     if (!streamUrl) {
-      return isWan
-        ? "广域网模式下暂未获取到快照，请确认设备已上传到 /api/camera/latest。"
-        : invalidStreamReason
+      return "暂未获取到快照，请确认设备已上传到 /api/camera/latest。"
     }
     if (!frameReady) {
-      return isWan ? "正在等待最新快照加载完成。" : "正在等待局域网实时画面可用。"
+      return "正在等待最新快照加载完成。"
     }
     return null
   })()
 
   const previewStatusText = (() => {
-    if (canAnalyze) {
-      return isWan ? "真实快照已就绪" : "真实画面已就绪"
-    }
+    if (canAnalyze) return "真实快照已就绪"
     if (streamError) return "预览异常"
-    if (!streamUrl) return "未接入视频流"
-    return isWan ? "等待远程快照" : "等待实时画面"
+    if (!streamUrl) return "未接入快照"
+    return "等待远程快照"
   })()
 
   const handleAnalyze = async () => {
@@ -275,39 +139,29 @@ export function VisionSection() {
         description: "链路为 bag-image 识图，再由 bag-text 生成中文结论。",
       })
 
-      let blob: Blob
+      const response = await fetch(`/api/camera/latest?t=${Date.now()}`, {
+        cache: "no-store",
+      })
 
-      if (isWan) {
-        const response = await fetch(`/api/camera/latest?t=${Date.now()}`, {
-          cache: "no-store",
-        })
-
-        if (!response.ok) {
-          throw new Error("未能获取远程快照，请确认摄像头已上传最新图片。")
-        }
-
-        const contentType = response.headers.get("content-type") || ""
-        if (contentType.includes("application/json")) {
-          const body = await response.json().catch(() => null)
-          throw new Error(
-            body?.message
-              ? `远程快照空态：${body.message}`
-              : "远程快照接口当前没有可分析的图片。",
-          )
-        }
-
-        if (!contentType.startsWith("image/")) {
-          throw new Error("远程快照接口没有返回图片内容，无法继续分析。")
-        }
-
-        blob = await response.blob()
-      } else {
-        if (!imageRef.current) {
-          throw new Error("当前没有可截取的局域网画面。")
-        }
-
-        blob = await captureImageBlob(imageRef.current)
+      if (!response.ok) {
+        throw new Error("未能获取远程快照，请确认摄像头已上传最新图片。")
       }
+
+      const contentType = response.headers.get("content-type") || ""
+      if (contentType.includes("application/json")) {
+        const body = await response.json().catch(() => null)
+        throw new Error(
+          body?.message
+            ? `远程快照空态：${body.message}`
+            : "远程快照接口当前没有可分析的图片。",
+        )
+      }
+
+      if (!contentType.startsWith("image/")) {
+        throw new Error("远程快照接口没有返回图片内容，无法继续分析。")
+      }
+
+      const blob = await response.blob()
 
       const formData = new FormData()
       formData.append("image", blob, "snapshot.jpg")
@@ -372,30 +226,16 @@ export function VisionSection() {
                 <Video className="h-4 w-4" />
                 实时画面
               </CardTitle>
-              <div className="flex items-center gap-3">
-                <Label htmlFor="stream-mode" className="text-xs text-muted-foreground">
-                  {isWan ? "广域网快照" : "局域网流"}
-                </Label>
-                <Switch
-                  id="stream-mode"
-                  checked={isWan}
-                  onCheckedChange={(checked) => {
-                    setIsWan(checked)
-                    setStreamError(null)
-                  }}
-                />
-              </div>
+              <Badge variant="outline">广域网快照</Badge>
             </div>
           </CardHeader>
           <CardContent>
             <div className="relative aspect-video w-full overflow-hidden rounded-lg border border-border bg-muted">
               {streamUrl ? (
                 <img
-                  ref={imageRef}
-                  key={isWan ? imageUrl : `lan-${lanStreamUrl}`}
+                  key={imageUrl}
                   src={streamUrl}
-                  alt={isWan ? "广域网快照预览" : "局域网实时流预览"}
-                  crossOrigin="anonymous"
+                  alt="广域网快照预览"
                   className="absolute inset-0 h-full w-full object-cover"
                   onLoad={() => {
                     setStreamError(null)
@@ -405,9 +245,7 @@ export function VisionSection() {
                   onError={() => {
                     setFrameReady(false)
                     setStreamError(
-                      isWan
-                        ? "远程快照当前不可用，请确认设备已成功上传最新图片。"
-                        : "局域网视频流加载失败，请检查地址、网络与跨域配置。",
+                      "远程快照当前不可用，请确认设备已成功上传最新图片。",
                     )
                   }}
                 />
@@ -424,20 +262,13 @@ export function VisionSection() {
                   </div>
                   <div className="space-y-1">
                     <p className="text-sm font-medium text-foreground">
-                      {streamError
-                        ? "当前没有可分析的真实画面"
-                        : isWan
-                          ? "等待远程快照"
-                          : "等待局域网视频流"}
+                      {streamError ? "当前没有可分析的真实画面" : "等待远程快照"}
                     </p>
                     <p className="text-xs leading-5 text-muted-foreground">
                       {blockedReason ||
                         "只有在真实画面就绪后，AI 分析按钮才会使用最新图像执行分析。"}
                     </p>
                   </div>
-                  {streamWarning ? (
-                    <p className="text-xs text-amber-700">{streamWarning}</p>
-                  ) : null}
                 </div>
               )}
 
@@ -448,7 +279,7 @@ export function VisionSection() {
                 >
                   {canAnalyze ? "真实输入" : "等待输入"}
                 </Badge>
-                <Badge variant="outline">{isWan ? "广域网" : "局域网"}</Badge>
+                <Badge variant="outline">广域网</Badge>
               </div>
 
               <div className="absolute bottom-3 right-3 z-10">
@@ -483,7 +314,7 @@ export function VisionSection() {
               <div className="rounded-lg border border-border bg-muted/30 p-2">
                 <div className="text-[10px] uppercase tracking-wide">输入来源</div>
                 <div className="mt-1 text-foreground">
-                  {isWan ? "远程快照接口 /api/camera/latest" : "局域网 ESP32 视频流"}
+                  远程快照接口 /api/camera/latest
                 </div>
               </div>
               <div className="rounded-lg border border-border bg-muted/30 p-2">
@@ -517,7 +348,7 @@ export function VisionSection() {
                 <div className="rounded-lg border border-dashed border-border bg-muted/20 p-2 text-[11px] leading-5 text-muted-foreground">
                   真实链路：图片 → <span className="font-medium text-foreground">bag-image</span> →
                   结构化结果 → <span className="font-medium text-foreground">bag-text</span> →
-                  页面中文结论。LAN 流只适合同网段；WAN 快照需要设备先用 `x-device-token` 上传到 `/api/camera/latest`，
+                  页面中文结论。广域网快照需要设备先用 `x-device-token` 上传到 `/api/camera/latest`，
                   未配置公网快照源时这里只显示空态。
                 </div>
 
