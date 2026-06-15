@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import type { MqttClient } from 'mqtt'
+import { apiFetch } from '@/lib/api-fetch'
 
 export type MqttConnectionStatus =
   | 'connected'
@@ -9,7 +10,16 @@ export type MqttConnectionStatus =
 
 export type IoTApiFetchStatus = 'idle' | 'loading' | 'success' | 'error'
 
-export type IoTCmdType = 'mode_switch' | 'screen_text'
+export type IoTCmdType = 'mode_switch' | 'screen_text' | 'set_timetable'
+
+// 麦克风/语音健康态，镜像自 retain 主题 v5/bag/voice/health（Jetson 上报）。
+// 让仪表盘能显示"麦克风坏了，需去书包旁拔插 USB"这类需现场处理的故障。
+export type MicHealthStatus = 'ok' | 'need_physical_replug' | 'recovered'
+export type MicHealth = {
+  status: MicHealthStatus
+  stage?: string
+  ts?: string
+}
 
 export type IoTCmdAck = {
   cmd_id: string
@@ -108,6 +118,9 @@ interface IoTState {
   lastVoiceCmd: VoiceCmd | null // [语音联动] 最近一条语音发起的控制命令
   setLastVoiceCmd: (cmd: VoiceCmd | null) => void // [语音联动]
 
+  micHealth: MicHealth | null
+  setMicHealth: (health: MicHealth | null) => void
+
   fetchInitialState: () => Promise<void>
 }
 
@@ -136,6 +149,7 @@ export const useIoTStore = create<IoTState>()((set) => ({
     voiceLastSeenAt: null,
     lastVoiceEvent: null,
     lastVoiceCmd: null, // [语音联动]
+    micHealth: null,
 
     setMqttConnectionStatus: (status) =>
       set((state) => {
@@ -198,6 +212,12 @@ export const useIoTStore = create<IoTState>()((set) => ({
         voiceLastSeenAt: cmd?.ts ?? new Date().toISOString(),
       }),
 
+    setMicHealth: (health) =>
+      set((state) => {
+        logStateTransition('Mic health', state.micHealth?.status, health?.status)
+        return { micHealth: health }
+      }),
+
     publishCommand: (action, value) => {
       const state = useIoTStore.getState()
       const client = state.mqttClient
@@ -245,7 +265,7 @@ export const useIoTStore = create<IoTState>()((set) => ({
     fetchInitialState: async () => {
       useIoTStore.getState().setIoTApiFetchStatus('loading')
       try {
-        const res = await fetch('/api/iot/status', { cache: 'no-store' })
+        const res = await apiFetch('/api/iot/status', { cache: 'no-store' })
         if (!res.ok) {
           console.warn('[Store] Initial IoT state request failed:', res.status)
           useIoTStore.getState().setIoTApiFetchStatus('error', `http_${res.status}`)

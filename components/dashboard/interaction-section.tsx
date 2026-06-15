@@ -16,6 +16,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
+import { TimetableEditor } from "@/components/dashboard/timetable-editor"
 import { useIoTStore } from "@/store/useIoTStore"
 import {
   ChevronDown,
@@ -260,12 +261,23 @@ export function InteractionSection() {
     })
   }
 
+  // 离线确认：broker 连着但设备未上报在线时，命令可能进不了设备。
+  // 返回 false 表示用户取消、不应发送。
+  const confirmIfOffline = () => {
+    if (mqttConnectionStatus === "connected" && !deviceOnline) {
+      return window.confirm("设备当前离线，命令可能不会送达。确定仍要发送吗？")
+    }
+    return true
+  }
+
   const handlePublishScreenText = (value: string) => {
     const trimmed = value.trim()
     if (!trimmed) {
       toast.warning("当前没有可发送的屏幕文字")
       return
     }
+
+    if (!confirmIfOffline()) return
 
     const result = publishCommand("screen_text", trimmed)
     if (!result.ok) {
@@ -289,6 +301,8 @@ export function InteractionSection() {
   }
 
   const handleQuickCommand = (action: "mode_switch" | "screen_text", value: string) => {
+    if (!confirmIfOffline()) return
+
     const result = publishCommand(action, value)
     if (!result.ok) {
       toast.error("发送失败", {
@@ -540,6 +554,8 @@ export function InteractionSection() {
           </CardContent>
         </Card>
       </div>
+
+      <TimetableEditor />
 
       <Card className="border-border bg-card">
         <Collapsible open={isAdvancedOpen} onOpenChange={setIsAdvancedOpen}>
