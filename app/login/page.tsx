@@ -47,7 +47,9 @@ export default function LoginPage() {
         setError(data?.message ?? "请求失败，请稍后重试")
         return
       }
-      router.replace("/")
+      // 回跳到被拦截前的页面（仅允许站内路径，避免开放重定向）
+      const next = new URLSearchParams(window.location.search).get("next")
+      router.replace(next && next.startsWith("/") ? next : "/")
       router.refresh()
     } catch {
       setError("网络错误，请稍后重试")

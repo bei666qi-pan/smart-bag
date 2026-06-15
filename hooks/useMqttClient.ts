@@ -16,6 +16,7 @@ interface MqttConfig {
     voiceStatus: string
     voiceEvent: string
     voiceCmd: string // [语音联动] Jetson→ESP32 的语音控制命令
+    voiceHealth: string // 麦克风/语音健康态（retain）
   }
 }
 
@@ -30,6 +31,7 @@ const DEFAULT_CONFIG: MqttConfig = {
     voiceStatus: 'v5/bag/voice/status',
     voiceEvent: 'v5/bag/voice/event',
     voiceCmd: 'v5/bag/voice/cmd', // [语音联动]
+    voiceHealth: 'v5/bag/voice/health',
   },
 }
 
@@ -120,6 +122,25 @@ export function useMqttClient(config: Partial<MqttConfig> = {}) {
         // [语音联动] Jetson→ESP32 的语音控制命令（独立命名空间，不 bump 设备 lastSeen）
         if (topic === finalConfig.topics.voiceCmd) {
           currentStore.setLastVoiceCmd(data)
+          return
+        }
+
+        // 麦克风/语音健康态（retain）：need_physical_replug 需有人去书包旁拔插 USB 麦克风。
+        // 不 bump 设备 lastSeen（属于语音子系统）。
+        if (topic === finalConfig.topics.voiceHealth) {
+          if (typeof data.status === 'string') {
+            currentStore.setMicHealth({
+              status: data.status,
+              stage: typeof data.stage === 'string' ? data.stage : undefined,
+              ts: new Date().toISOString(),
+            })
+            if (data.status === 'need_physical_replug') {
+              toast.error('麦克风故障', {
+                description: '请到书包旁拔插 USB 麦克风后重试',
+                duration: 10000,
+              })
+            }
+          }
           return
         }
 
