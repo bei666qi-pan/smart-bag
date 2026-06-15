@@ -2,7 +2,7 @@
 
 /* eslint-disable @next/next/no-img-element */
 
-import { useActionState, useEffect, useState } from "react"
+import { useActionState, useEffect, useRef, useState } from "react"
 import { analyzeImageAction, type ActionState } from "@/app/actions/analyze-image"
 import { useIoTStore } from "@/store/useIoTStore"
 import { Badge } from "@/components/ui/badge"
@@ -56,6 +56,7 @@ export function VisionSection() {
   const [streamError, setStreamError] = useState<string | null>(null)
   const [frameReady, setFrameReady] = useState(false)
   const [lastFrameAt, setLastFrameAt] = useState<string | null>(null)
+  const lastSnapshotRef = useRef<string | null>(null)
   const [state, formAction, isPending] = useActionState(analyzeImageAction, initialState)
 
   const setLastVisionResult = useIoTStore((s) => s.setLastVisionResult)
@@ -67,17 +68,37 @@ export function VisionSection() {
   const streamUrl = imageUrl
   const canAnalyze = Boolean(streamUrl) && frameReady && !streamError
 
-  // 广域网快照：定时轮询 /api/camera/latest（设备用 x-device-token 上传最新图）
+  // 广域网快照：轮询轻量的 /api/camera/status 探测是否有新帧；
+  // 仅当 lastSnapshotAt 真的变化时才更新图片 URL（设备约 30s 上传一次）。
+  // 这样避免每 3s 无谓重拉 /api/camera/latest 导致的明显闪烁/刷新感。
   useEffect(() => {
-    const updateSnapshot = () => {
-      setFrameReady(false)
-      setImageUrl(`/api/camera/latest?t=${Date.now()}`)
+    let active = true
+
+    const poll = async () => {
+      try {
+        const res = await fetch("/api/camera/status", { cache: "no-store" })
+        if (!res.ok || !active) return
+        const data = await res.json()
+        if (!active) return
+        if (data?.hasSnapshot && typeof data.lastSnapshotAt === "string") {
+          if (lastSnapshotRef.current !== data.lastSnapshotAt) {
+            lastSnapshotRef.current = data.lastSnapshotAt
+            // 用快照时间戳做 cache-buster：仅在有新帧时换 src，浏览器会保留旧图直到新图加载完，平滑无闪
+            setImageUrl(`/api/camera/latest?t=${encodeURIComponent(data.lastSnapshotAt)}`)
+          }
+        }
+      } catch {
+        // best-effort：拿不到状态就保持当前画面
+      }
     }
 
-    updateSnapshot()
-    const pollInterval = setInterval(updateSnapshot, 3000)
+    poll()
+    const pollInterval = setInterval(poll, 3000)
 
-    return () => clearInterval(pollInterval)
+    return () => {
+      active = false
+      clearInterval(pollInterval)
+    }
   }, [])
 
   useEffect(() => {
@@ -233,7 +254,6 @@ export function VisionSection() {
             <div className="relative aspect-video w-full overflow-hidden rounded-lg border border-border bg-muted">
               {streamUrl ? (
                 <img
-                  key={imageUrl}
                   src={streamUrl}
                   alt="广域网快照预览"
                   className="absolute inset-0 h-full w-full object-cover"
