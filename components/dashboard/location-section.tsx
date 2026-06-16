@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import AMapLoader from "@amap/amap-jsapi-loader"
 import { MapPin, Navigation, Clock, Loader2, Crosshair } from "lucide-react"
 import { toast } from "sonner"
@@ -9,7 +9,22 @@ import { Badge } from "@/components/ui/badge"
 import { useIoTStore } from "@/store/useIoTStore"
 import { convertWgs84ToGcj02Coords } from "@/lib/coord-transform"
 
-const DEFAULT_CENTER: [number, number] = [121.4737, 31.2304]
+// ───────────────────────────────────────────────────────────────────────────
+// 虚拟定位（demo）：把地图固定显示在浙江农林大学11号学院楼，即使设备没有 GPS 信号
+// 也始终显示此处（书包在室内常年拿不到 GPS fix，原始上报恒为 0,0）。
+// 坐标用 WGS-84（与 GPS 原始坐标同坐标系；组件内部统一转 GCJ-02 给高德），来源 OpenStreetMap
+// 浙江农林大学(东湖校区) 临安区。把 VIRTUAL_LOCATION_WGS84 设为 null 即可关闭、恢复用真实 GPS。
+const VIRTUAL_LOCATION_WGS84: [number, number] | null = [119.7237543, 30.2588962]
+// true=始终显示虚拟定位（忽略真实 GPS）；false=仅当无有效真实定位时回退到虚拟定位。
+const VIRTUAL_ALWAYS = true
+const VIRTUAL_LOCATION_NAME = "浙江农林大学11号学院楼"
+
+// 无虚拟点且无 GPS 时的兜底地图中心（上海）
+const FALLBACK_CENTER: [number, number] = [121.4737, 31.2304]
+// 地图初始中心（GCJ-02，高德原生）：有虚拟点则开局即对准虚拟点，否则用兜底中心
+const DEFAULT_CENTER: [number, number] = VIRTUAL_LOCATION_WGS84
+  ? convertWgs84ToGcj02Coords(VIRTUAL_LOCATION_WGS84)
+  : FALLBACK_CENTER
 
 function isValidCoords(coords: [number, number] | null): coords is [number, number] {
   if (!coords || coords.length !== 2) return false
@@ -51,6 +66,15 @@ export function LocationSection() {
   const [mapReady, setMapReady] = useState(false)
   const gpsCoords = useIoTStore((state) => state.gpsCoords)
   const lastSeenAt = useIoTStore((state) => state.lastSeenAt)
+  // 真实定位是否有效（排除 0,0 = GPS 未定位时的占位上报）
+  const realValid =
+    isValidCoords(gpsCoords) && !(gpsCoords[0] === 0 && gpsCoords[1] === 0)
+  // 生效坐标（WGS-84）：始终虚拟 / 无真实定位时回退虚拟 / 否则用真实 GPS
+  const isVirtual = !!VIRTUAL_LOCATION_WGS84 && (VIRTUAL_ALWAYS || !realValid)
+  const effectiveCoords = useMemo<[number, number] | null>(() => {
+    if (isVirtual) return VIRTUAL_LOCATION_WGS84
+    return realValid ? (gpsCoords as [number, number]) : null
+  }, [gpsCoords, realValid, isVirtual])
   const key = process.env.NEXT_PUBLIC_AMAP_KEY
   const securityCode = process.env.NEXT_PUBLIC_AMAP_SECURITY_CODE
   const mapConfigError = !key || key === "your_amap_key_here"
@@ -187,7 +211,7 @@ export function LocationSection() {
   }, [key, mapConfigError])
 
   useEffect(() => {
-    if (!mapReady || !mapRef.current || !isValidCoords(gpsCoords)) {
+    if (!mapReady || !mapRef.current || !isValidCoords(effectiveCoords)) {
       return
     }
 
@@ -196,22 +220,23 @@ export function LocationSection() {
       return
     }
 
-    const converted = convertWgs84ToGcj02Coords(gpsCoords)
+    const converted = convertWgs84ToGcj02Coords(effectiveCoords)
     if (!converted || converted.length !== 2) {
       return
     }
 
-    const coordKey = `${gpsCoords[0].toFixed(6)},${gpsCoords[1].toFixed(6)}`
+    const coordKey = `${effectiveCoords[0].toFixed(6)},${effectiveCoords[1].toFixed(6)}`
     const lngLat = new AMapGlobal.LngLat(converted[0], converted[1])
 
     if (!markerRef.current) {
       markerRef.current = new AMapGlobal.Marker({
         position: lngLat,
-        title: "智能书包",
+        title: isVirtual ? VIRTUAL_LOCATION_NAME : "智能书包",
       })
       mapRef.current.add(markerRef.current)
     } else {
       markerRef.current.setPosition(lngLat)
+      markerRef.current.setTitle?.(isVirtual ? VIRTUAL_LOCATION_NAME : "智能书包")
     }
 
     if (!polylineRef.current) {
@@ -233,7 +258,7 @@ export function LocationSection() {
     }
 
     mapRef.current.setCenter(lngLat)
-  }, [gpsCoords, mapReady])
+  }, [effectiveCoords, mapReady, isVirtual])
 
   useEffect(() => {
     if (!mapReady || !mapContainerRef.current) {
@@ -260,7 +285,7 @@ export function LocationSection() {
     }
   }, [mapReady])
 
-  const hasGpsData = isValidCoords(gpsCoords)
+  const hasGpsData = isValidCoords(effectiveCoords)
 
   return (
     <div className="flex flex-col gap-4">
@@ -311,7 +336,11 @@ export function LocationSection() {
                       variant="secondary"
                       className="bg-white/90 text-xs text-muted-foreground backdrop-blur-sm"
                     >
-                      {hasGpsData ? "地图中心已跟随最新坐标" : "当前显示默认中心"}
+                      {isVirtual
+                        ? VIRTUAL_LOCATION_NAME
+                        : hasGpsData
+                          ? "地图中心已跟随最新坐标"
+                          : "当前显示默认中心"}
                     </Badge>
                   </div>
 
@@ -320,7 +349,7 @@ export function LocationSection() {
                       variant="secondary"
                       className="bg-white/90 font-mono text-[10px] backdrop-blur-sm"
                     >
-                      {formatCoords(gpsCoords)}
+                      {formatCoords(effectiveCoords)}
                     </Badge>
                   </div>
 
@@ -355,7 +384,7 @@ export function LocationSection() {
                   当前坐标
                 </div>
                 <div className="mt-1 font-mono text-sm text-foreground">
-                  {formatCoords(gpsCoords)}
+                  {formatCoords(effectiveCoords)}
                 </div>
               </div>
 
@@ -373,7 +402,7 @@ export function LocationSection() {
                   轨迹状态
                 </div>
                 <div className="mt-1 text-sm text-foreground">
-                  {hasGpsData ? "实时跟随中" : "暂无实时轨迹"}
+                  {isVirtual ? "已定位" : hasGpsData ? "实时跟随中" : "暂无实时轨迹"}
                 </div>
               </div>
             </div>
