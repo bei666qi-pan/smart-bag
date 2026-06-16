@@ -12,6 +12,11 @@ import { getSessionUser, getUserNewapiConfig } from '@/lib/auth'
 
 const MAX_IMAGE_SIZE_BYTES = 8 * 1024 * 1024
 
+// 远端大模型统一走小米 MiMo（低延迟优先、智力次要）。视觉用多模态 omni；
+// thinking 关闭可去掉思维链、显著降延迟（omni 实测 2.7s→1.6s）。模型名可用 env 覆盖。
+const VISION_MODEL = process.env.BAG_VISION_MODEL || 'mimo-v2-omni'
+const MIMO_NO_THINK: Record<string, unknown> = { thinking: { type: 'disabled' } }
+
 const imageUploadSchema = z.object({
   image: z
     .instanceof(Blob)
@@ -82,12 +87,13 @@ async function callBagImage(
   base64Image: string,
   auth?: { apiKey: string; baseUrl?: string },
 ) {
-  const response = await chatCompletion('bag-image', buildBagImageMessages(base64Image), {
+  const response = await chatCompletion(VISION_MODEL, buildBagImageMessages(base64Image), {
     temperature: 0.1,
     max_tokens: 800,
     response_format: { type: 'json_object' },
     timeoutMs: 45_000,
     auth,
+    extraBody: MIMO_NO_THINK,
   })
 
   const raw = extractModelText(response)

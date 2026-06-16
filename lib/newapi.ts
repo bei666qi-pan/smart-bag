@@ -15,6 +15,8 @@ export type ChatCompletionOptions = {
   timeoutMs?: number
   /** 用户级配置覆盖（设置页填入的 API key）；缺省回退服务端环境变量 */
   auth?: { apiKey?: string; baseUrl?: string }
+  /** 透传给上游的额外 body 字段（如 MiMo 的 thinking:{type:'disabled'} 关思考链、降延迟） */
+  extraBody?: Record<string, unknown>
 }
 
 export type NewAPIErrorCode =
@@ -134,6 +136,11 @@ function buildChatCompletionBody(
 
   if (responseFormat) {
     body.response_format = responseFormat
+  }
+
+  // 透传额外字段（如 MiMo thinking:{type:'disabled'}）；放最后，允许覆盖上面的默认
+  if (options.extraBody) {
+    return { ...body, ...options.extraBody }
   }
 
   return body

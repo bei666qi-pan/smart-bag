@@ -10,6 +10,11 @@ import {
 } from '@/lib/newapi'
 import { getSessionUser, getUserNewapiConfig } from '@/lib/auth'
 
+// 远端大模型统一走小米 MiMo（低延迟优先、智力次要）。文本评估用 flash；
+// thinking 关闭去掉思维链、降延迟。模型名可用 env 覆盖。
+const TEXT_MODEL = process.env.BAG_TEXT_MODEL || 'mimo-v2-flash'
+const MIMO_NO_THINK: Record<string, unknown> = { thinking: { type: 'disabled' } }
+
 /**
  * 鉴权 + 解析当前用户的 NewAPI 配置：
  * 未登录直接拒绝；已登录则优先用其在设置页填入的 key（无则回退服务端环境变量）。
@@ -110,12 +115,13 @@ export async function analyzeTextWithBagText(
 
   const auth = await resolveUserNewapiAuth()
 
-  const response = await chatCompletion('bag-text', buildBagTextMessages(input), {
+  const response = await chatCompletion(TEXT_MODEL, buildBagTextMessages(input), {
     temperature: 0.3,
     max_tokens: 512,
     response_format: null,
     timeoutMs: 30_000,
     auth,
+    extraBody: MIMO_NO_THINK,
   })
 
   let raw = ''
