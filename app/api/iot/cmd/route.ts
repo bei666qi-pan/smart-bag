@@ -5,7 +5,7 @@ import { publishDeviceCommand } from '@/lib/iot/mqtt-command'
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-const ALLOWED_ACTIONS = new Set(['mode_switch', 'screen_text'])
+const ALLOWED_ACTIONS = new Set(['mode_switch', 'screen_text', 'set_timetable'])
 const MAX_VALUE_LEN = 200
 
 // 下发设备指令到 v5/bag/cmd。
