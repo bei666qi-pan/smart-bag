@@ -20,8 +20,17 @@ interface MqttConfig {
   }
 }
 
+// NEXT_PUBLIC_* values are compiled into the browser bundle.  Keep a canonical
+// production fallback so a missing build-time variable cannot make every
+// deployed browser try its own localhost broker.
+const DEFAULT_BROKER_URL =
+  process.env.NEXT_PUBLIC_MQTT_URL ||
+  (process.env.NODE_ENV === 'production'
+    ? 'wss://bag.versecraft.cn/mqtt'
+    : 'ws://localhost:8083')
+
 const DEFAULT_CONFIG: MqttConfig = {
-  brokerUrl: process.env.NEXT_PUBLIC_MQTT_URL || 'ws://localhost:8083',
+  brokerUrl: DEFAULT_BROKER_URL,
   wsPath: process.env.NEXT_PUBLIC_MQTT_PATH || '/mqtt',
   topics: {
     lwt: 'v5/bag/status',

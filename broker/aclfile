@@ -1,0 +1,27 @@
+# The dashboard is intentionally anonymous but read-only. It must never be
+# able to inject a device command or spoof device telemetry.
+topic read v5/bag/status
+topic read v5/bag/sensors
+topic read v5/bag/gps
+topic read v5/bag/cmd/ack
+topic read v5/bag/voice/status
+topic read v5/bag/voice/event
+topic read v5/bag/voice/cmd
+topic read v5/bag/voice/health
+
+# ESP32 sensor board.
+user bag01
+topic write v5/bag/status
+topic write v5/bag/sensors
+topic write v5/bag/gps
+topic read v5/bag/cmd
+
+# Jetson voice assistant.
+user jetson
+topic write v5/bag/voice/#
+topic read v5/bag/cmd
+
+# The Next.js daemon mirrors telemetry to Redis and sends authenticated device
+# commands after a user session has been checked by the API route.
+user server
+topic readwrite v5/bag/#
